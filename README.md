@@ -7,7 +7,7 @@ built with **React + Firebase + Tailwind CSS** for a fast, responsive, and engag
 
 ## 🚀 Live Demo
 
-🔗 [Visit TikTikVideo Website](https://tiktikvideo.example.com)  
+🔗 [Visit (https://mithunpagadwar.github.io/TikTikvideo/
 *(Replace this link with your actual website URL)*
 
 ---
