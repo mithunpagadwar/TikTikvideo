@@ -444,6 +444,36 @@ body {
     font-weight: 500;
 }
 
+/* Delete Video Button */
+.delete-video-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background-color: rgba(255, 0, 0, 0.9);
+    color: white;
+    border: none;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.2s ease;
+    z-index: 10;
+}
+
+.video-card:hover .delete-video-btn {
+    opacity: 1;
+}
+
+.delete-video-btn:hover {
+    background-color: rgba(200, 0, 0, 0.95);
+    transform: scale(1.1);
+}
+
+.delete-video-btn:active {
+    transform: scale(0.95);
+}
+
 /* Info Section */
 .video-info {
     padding: 10px 12px;

@@ -11,7 +11,7 @@ class TikTikApp {
         this.likedVideos = this.loadLikedVideos();
         this.savedVideos = this.loadSavedVideos();
         this.comments = this.loadComments();
-        this.myVideos = this.loadMyVideos();
+        this.myVideos = this.loadMyVideosFromStorage();
         this.channelData = this.loadChannelData();
         this.myShorts = this.loadMyShorts();
         this.liveStreams = this.loadLiveStreams();
@@ -99,6 +99,7 @@ class TikTikApp {
     init() {
         this.setupEventListeners();
         this.applyTheme();
+        this.mergeUploadedVideos();
         this.loadHomePage();
         this.updateAdminSettings();
     }
@@ -277,6 +278,22 @@ class TikTikApp {
         if (uploadVideoBtnEl) {
             uploadVideoBtnEl.addEventListener('click', () => {
                 this.openUploadModal();
+            });
+        }
+
+        // Upload short button in channel page
+        const uploadShortBtnEl = document.getElementById('uploadShortBtn');
+        if (uploadShortBtnEl) {
+            uploadShortBtnEl.addEventListener('click', () => {
+                this.openShortModal();
+            });
+        }
+
+        // Go live button in channel page
+        const goLiveBtnEl = document.getElementById('goLiveBtn');
+        if (goLiveBtnEl) {
+            goLiveBtnEl.addEventListener('click', () => {
+                this.openLiveModal();
             });
         }
 
@@ -936,9 +953,45 @@ class TikTikApp {
         }
 
         this.myVideos.forEach(video => {
-            const videoCard = this.createVideoCard(video);
+            const videoCard = this.createVideoCard(video, true);
             grid.appendChild(videoCard);
         });
+    }
+
+    deleteVideo(videoId) {
+        if (!confirm('Are you sure you want to delete this video? This action cannot be undone.')) {
+            return;
+        }
+
+        // Remove from myVideos
+        this.myVideos = this.myVideos.filter(v => v.id !== videoId);
+        
+        // Remove from main videos array
+        this.videos = this.videos.filter(v => v.id !== videoId);
+        
+        // Remove from shorts if it's a short
+        this.myShorts = this.myShorts.filter(s => s.id !== videoId);
+        
+        // Remove from live streams if it's a live stream
+        this.liveStreams = this.liveStreams.filter(l => l.id !== videoId);
+        
+        // Save to localStorage
+        this.saveMyVideos();
+        this.saveMyShorts();
+        this.saveLiveStreams();
+        
+        // Update channel stats
+        this.channelData.videoCount = this.myVideos.length + this.myShorts.length;
+        this.saveChannelData();
+        
+        this.showToast('Video deleted successfully', 'success');
+        
+        // Refresh current page
+        if (this.currentPage === 'library') {
+            this.loadLibraryPage();
+        } else {
+            this.loadHomePage();
+        }
     }
 
     loadHistoryPage() {
@@ -1594,15 +1647,20 @@ class TikTikApp {
         // Feedback page content is already in HTML
     }
 
-    createVideoCard(video) {
+    createVideoCard(video, showDeleteButton = false) {
         const card = document.createElement('div');
         card.className = 'video-card';
-        card.onclick = () => this.openVideoModal(video);
+        card.onclick = (e) => {
+            if (!e.target.closest('.delete-video-btn')) {
+                this.openVideoModal(video);
+            }
+        };
 
         card.innerHTML = `
             <div class="video-thumbnail">
                 <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgdmlld0JveD0iMCAwIDMyMCAxODAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMjAiIGhlaWdodD0iMTgwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNDQuNSA5MEwxNjUgMTAyLjU5VjU3LjQxTDE0NC41IDkwWiIgZmlsbD0iIzk0QTNBOCIvPgo8L3N2Zz4K';">
                 <span class="video-duration">${video.duration}</span>
+                ${showDeleteButton ? `<button class="delete-video-btn" onclick="event.stopPropagation(); window.tiktikApp.deleteVideo('${video.id}');" title="Delete video"><i class="fas fa-trash"></i></button>` : ''}
             </div>
             <div class="video-info">
                 <h3 class="video-title">${video.title}</h3>
@@ -2868,53 +2926,57 @@ class TikTikApp {
     toggleProfileMenu();
   }
 
-// Google Sign-in and Sign-out functionality
+// Simple Google Sign-in simulation (mock for demo purposes)
 function signInWithGoogle() {
-  const provider = new firebase.auth.GoogleAuthProvider();
+  const mockUser = {
+    displayName: 'Demo User',
+    email: 'demo@tiktik.com',
+    photoURL: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&h=150&fit=crop'
+  };
 
-  firebase.auth().signInWithPopup(provider)
-    .then((result) => {
-      const user = result.user;
+  // Save user to localStorage
+  localStorage.setItem('tiktik_user', JSON.stringify(mockUser));
 
-      // UI Update
-        document.getElementById("googleLoginBtn").style.display = "none";
-        document.getElementById("profile-container").style.display = "flex";
-        document.getElementById("profile-pic").src = user.photoURL;
-        document.getElementById("profile-avatar").src = user.photoURL;
-        document.getElementById("profile-name").innerText = user.displayName;
-        document.getElementById("profile-email").innerText = user.email;
+  // UI Update
+  document.getElementById("googleLoginBtn").style.display = "none";
+  document.getElementById("profile-container").style.display = "flex";
+  document.getElementById("profile-pic").src = mockUser.photoURL;
+  document.getElementById("profile-avatar").src = mockUser.photoURL;
+  document.getElementById("profile-name").innerText = mockUser.displayName;
+  document.getElementById("profile-email").innerText = mockUser.email;
 
-      console.log("Sign-in successful:", user);
-    }).catch((error) => {
-      console.error("Error signing in:", error);
-    });
+  if (window.tiktikApp) {
+    window.tiktikApp.showToast('Signed in successfully', 'success');
+  }
 }
 
-function signOut() {
-  firebase.auth().signOut()
-    .then(() => {
-      // Sign-out successful.
-      console.log("Sign-out successful");
+function logout() {
+  // Remove user from localStorage
+  localStorage.removeItem('tiktik_user');
 
-      // UI update
-      document.getElementById("googleLoginBtn").style.display = "block";
-      document.getElementById("profile-container").style.display = "none";
-    }).catch((error) => {
-      // An error happened.
-      console.error("Error signing out:", error);
-    });
+  // UI update
+  document.getElementById("googleLoginBtn").style.display = "block";
+  document.getElementById("profile-container").style.display = "none";
+
+  if (window.tiktikApp) {
+    window.tiktikApp.showToast('Signed out successfully', 'info');
+  }
+  
+  toggleProfileMenu();
 }
 
-// Check if user is already signed-in
-firebase.auth().onAuthStateChanged(function(user) {
-  if (user) {
-      document.getElementById("googleLoginBtn").style.display = "none";
-      document.getElementById("profile-container").style.display = "flex";
-      document.getElementById("profile-pic").src = user.photoURL;
-      document.getElementById("profile-avatar").src = user.photoURL;
-      document.getElementById("profile-name").innerText = user.displayName;
-      document.getElementById("profile-email").innerText = user.email;
-    }
+// Check if user is already signed-in on page load
+window.addEventListener('DOMContentLoaded', () => {
+  const savedUser = localStorage.getItem('tiktik_user');
+  if (savedUser) {
+    const user = JSON.parse(savedUser);
+    document.getElementById("googleLoginBtn").style.display = "none";
+    document.getElementById("profile-container").style.display = "flex";
+    document.getElementById("profile-pic").src = user.photoURL;
+    document.getElementById("profile-avatar").src = user.photoURL;
+    document.getElementById("profile-name").innerText = user.displayName;
+    document.getElementById("profile-email").innerText = user.email;
+  }
 });
 
 // Initialize the application when DOM is loaded
