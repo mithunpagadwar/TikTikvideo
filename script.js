@@ -15,6 +15,8 @@ class TikTikApp {
         this.channelData = this.loadChannelData();
         this.myShorts = this.loadMyShorts();
         this.liveStreams = this.loadLiveStreams();
+        this.subscriptions = this.loadSubscriptions();
+        this.userChannels = this.loadUserChannels();
         this.cameraStream = null;
         this.isCameraOn = false;
         this.isMicOn = false;
@@ -210,6 +212,15 @@ class TikTikApp {
 
         document.getElementById('downloadBtn').addEventListener('click', () => {
             this.downloadVideo();
+        });
+
+        // Subscribe and Bell buttons
+        document.getElementById('subscribeBtn').addEventListener('click', () => {
+            this.toggleSubscribe();
+        });
+
+        document.getElementById('bellBtn').addEventListener('click', () => {
+            this.toggleNotifications();
         });
 
         // Comment functionality
@@ -1699,6 +1710,23 @@ class TikTikApp {
             likeBtn.classList.remove('active');
         }
 
+        // Update subscribe button and bell icon state
+        const subscribeBtn = document.getElementById('subscribeBtn');
+        const bellBtn = document.getElementById('bellBtn');
+        const subscription = this.subscriptions.find(sub => sub.channel === video.channel);
+        
+        if (subscription) {
+            subscribeBtn.classList.add('subscribed');
+            subscribeBtn.textContent = 'Subscribed';
+            bellBtn.style.display = 'flex';
+            bellBtn.classList.toggle('active', subscription.notifications);
+        } else {
+            subscribeBtn.classList.remove('subscribed');
+            subscribeBtn.innerHTML = '<i class="fas fa-user-plus"></i> Subscribe';
+            bellBtn.style.display = 'none';
+            bellBtn.classList.remove('active');
+        }
+
         // Update save button state
         const saveBtn = document.getElementById('saveBtn');
         if (this.savedVideos.includes(video.id)) {
@@ -1977,6 +2005,68 @@ class TikTikApp {
         link.href = this.currentVideo.videoUrl;
         link.download = `${this.currentVideo.title}.mp4`;
         link.click();
+    }
+
+    toggleSubscribe() {
+        if (!this.currentVideo) return;
+
+        const subscribeBtn = document.getElementById('subscribeBtn');
+        const bellBtn = document.getElementById('bellBtn');
+        const channelName = this.currentVideo.channel;
+
+        if (!this.subscriptions) {
+            this.subscriptions = this.loadSubscriptions();
+        }
+
+        const isSubscribed = this.subscriptions.some(sub => sub.channel === channelName);
+
+        if (isSubscribed) {
+            // Unsubscribe
+            this.subscriptions = this.subscriptions.filter(sub => sub.channel !== channelName);
+            subscribeBtn.classList.remove('subscribed');
+            subscribeBtn.innerHTML = '<i class="fas fa-user-plus"></i> Subscribe';
+            bellBtn.style.display = 'none';
+            this.showToast(`Unsubscribed from ${channelName}`, 'info');
+        } else {
+            // Subscribe
+            this.subscriptions.push({
+                channel: channelName,
+                avatar: this.currentVideo.avatar,
+                notifications: false
+            });
+            subscribeBtn.classList.add('subscribed');
+            subscribeBtn.textContent = 'Subscribed';
+            bellBtn.style.display = 'flex';
+            this.showToast(`Subscribed to ${channelName}`, 'success');
+        }
+
+        this.saveSubscriptions();
+    }
+
+    toggleNotifications() {
+        if (!this.currentVideo) return;
+
+        const bellBtn = document.getElementById('bellBtn');
+        const channelName = this.currentVideo.channel;
+
+        if (!this.subscriptions) {
+            this.subscriptions = this.loadSubscriptions();
+        }
+
+        const subscription = this.subscriptions.find(sub => sub.channel === channelName);
+
+        if (subscription) {
+            subscription.notifications = !subscription.notifications;
+            bellBtn.classList.toggle('active', subscription.notifications);
+            
+            if (subscription.notifications) {
+                this.showToast('Notifications turned on', 'success');
+            } else {
+                this.showToast('Notifications turned off', 'info');
+            }
+
+            this.saveSubscriptions();
+        }
     }
 
     showCommentActions() {
@@ -2381,9 +2471,90 @@ class TikTikApp {
         document.getElementById(`${tab}Tab`).classList.add('active');
 
         // Load content based on selected tab
-        if (tab === 'videos') {
-            this.loadMyVideos();
+        switch(tab) {
+            case 'videos':
+                this.loadMyVideos();
+                break;
+            case 'shorts':
+                this.loadMyShorts();
+                break;
+            case 'live':
+                this.loadMyLiveStreams();
+                break;
+            case 'playlists':
+                this.loadMyPlaylists();
+                break;
+            case 'about':
+                // About tab content is static
+                break;
         }
+    }
+
+    loadMyShorts() {
+        const shortsTab = document.getElementById('shortsTab');
+        if (!shortsTab) return;
+
+        let shortsGrid = shortsTab.querySelector('.my-videos-grid');
+        if (!shortsGrid) {
+            shortsGrid = document.createElement('div');
+            shortsGrid.className = 'my-videos-grid';
+            shortsTab.appendChild(shortsGrid);
+        }
+        
+        shortsGrid.innerHTML = '';
+        const uploadSection = shortsTab.querySelector('.upload-section');
+
+        if (this.myShorts.length === 0) {
+            if (uploadSection) {
+                uploadSection.style.display = 'block';
+            }
+            return;
+        }
+
+        if (uploadSection) {
+            uploadSection.style.display = 'none';
+        }
+
+        this.myShorts.forEach(short => {
+            const videoCard = this.createVideoCard(short, true);
+            shortsGrid.appendChild(videoCard);
+        });
+    }
+
+    loadMyLiveStreams() {
+        const liveTab = document.getElementById('liveTab');
+        if (!liveTab) return;
+
+        let liveGrid = liveTab.querySelector('.my-videos-grid');
+        if (!liveGrid) {
+            liveGrid = document.createElement('div');
+            liveGrid.className = 'my-videos-grid';
+            liveTab.appendChild(liveGrid);
+        }
+        
+        liveGrid.innerHTML = '';
+        const uploadSection = liveTab.querySelector('.upload-section');
+
+        if (this.liveStreams.length === 0) {
+            if (uploadSection) {
+                uploadSection.style.display = 'block';
+            }
+            return;
+        }
+
+        if (uploadSection) {
+            uploadSection.style.display = 'none';
+        }
+
+        this.liveStreams.forEach(stream => {
+            const videoCard = this.createVideoCard(stream, true);
+            liveGrid.appendChild(videoCard);
+        });
+    }
+
+    loadMyPlaylists() {
+        // Playlists functionality will show empty state for now
+        // Can be expanded later with actual playlist management
     }
 
     openShortModal() {
@@ -2645,6 +2816,31 @@ class TikTikApp {
 
     saveComments() {
         localStorage.setItem('tiktik_comments', JSON.stringify(this.comments));
+    }
+
+    loadSubscriptions() {
+        const saved = localStorage.getItem('tiktik_subscriptions');
+        return saved ? JSON.parse(saved) : [];
+    }
+
+    saveSubscriptions() {
+        localStorage.setItem('tiktik_subscriptions', JSON.stringify(this.subscriptions));
+    }
+
+    loadUserChannels() {
+        const saved = localStorage.getItem('tiktik_user_channels');
+        return saved ? JSON.parse(saved) : [{
+            id: 'default',
+            name: 'My Channel',
+            avatar: 'https://pixabay.com/get/g1882a617f55023cde87198feea9e830686b0a69ae7f315295cebe2b111a575a3d2dd94672359c9d34b332edd722a8e7d502b680acae2e35040353fd2a2ee0f9a_1280.jpg',
+            banner: 'https://pixabay.com/get/g2d6e4de48b7bd3a87afab6e869007196adcc1cb3dfd663e6e585bcffd24c3260ab24ba71895df36ec3dc5902cba221c21d6918c76ffa1876e8ac616c437334eb_1280.jpg',
+            subscribers: 0,
+            videos: []
+        }];
+    }
+
+    saveUserChannels() {
+        localStorage.setItem('tiktik_user_channels', JSON.stringify(this.userChannels));
     }
 
     loadMyVideosFromStorage() {
