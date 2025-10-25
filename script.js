@@ -1,26 +1,46 @@
 // TikTik - YouTube Clone Application
-// Pure JavaScript implementation with local storage persistence
+// Pure JavaScript implementation with Firebase Authentication
 
-// Firebase Configuration
+// Firebase Configuration (Updated)
 const firebaseConfig = {
-  apiKey: "AIzaSyAY1kqPrI-Sw5LYPfIUoKE45nJ3papGZU8",
-  authDomain: "tiktikvideos-4e8e7.firebaseapp.com",
-  projectId: "tiktik-video-2de07"
+  apiKey: "AIzaSyAY1kqPrI-Sw5LYPfIUoKE45nJ3papGZU8",          // Web API Key
+  authDomain: "tiktik-video-2de07.firebaseapp.com",           // Correct Project ID domain
+  projectId: "tiktik-video-2de07"                             // Correct Project ID
 };
 
 // Initialize Firebase
-let firebaseApp = null;
-let firebaseAuth = null;
+let firebaseApp;
+let firebaseAuth;
 
-// Initialize Firebase when available
-if (typeof firebase !== 'undefined') {
-  try {
-    firebaseApp = firebase.initializeApp(firebaseConfig);
-    firebaseAuth = firebase.auth();
-    console.log('Firebase initialized successfully');
-  } catch (error) {
-    console.error('Firebase initialization error:', error);
-  }
+try {
+    if (typeof firebase !== 'undefined') {
+        firebaseApp = firebase.initializeApp(firebaseConfig);
+        firebaseAuth = firebase.auth();
+        console.log('✅ Firebase initialized successfully');
+    } else {
+        console.error('❌ Firebase SDK not loaded. Make sure you included Firebase scripts in HTML.');
+    }
+} catch (error) {
+    console.error('❌ Firebase initialization error:', error);
+}
+
+// Google Login Function
+function signInWithGoogle() {
+    if (!firebaseAuth) {
+        alert("Firebase not initialized properly.");
+        return;
+    }
+
+    const provider = new firebase.auth.GoogleAuthProvider();
+    firebaseAuth.signInWithPopup(provider)
+        .then((result) => {
+            console.log("User signed in:", result.user);
+            alert("Welcome " + result.user.displayName);
+        })
+        .catch((error) => {
+            console.error("Error during sign-in:", error);
+            alert(error.message);
+        });
 }
 
 class TikTikApp {
