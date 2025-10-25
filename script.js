@@ -3,9 +3,9 @@
 
 // Firebase Configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBlWjogX3gTipSJK31AwVw0D6KxDv3ry7Y",
+  apiKey: "AIzaSyAY1kqPrI-Sw5LYPfIUoKE45nJ3papGZU8",
   authDomain: "tiktikvideos-4e8e7.firebaseapp.com",
-  projectId: "tiktikvideos-4e8e7"
+  projectId: "tiktik-video-2de07"
 };
 
 // Initialize Firebase
