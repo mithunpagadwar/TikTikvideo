@@ -20,6 +20,10 @@
     
     <link rel="stylesheet" href="style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -66,7 +70,7 @@
         <div class="profile-details">
           <p id="profile-name" class="profile-name"></p>
           <p id="profile-email" class="profile-email"></p>
-          <a href="#" class="profile-link">Create a channel</a>
+          <a href="#" class="profile-link" onclick="createChannel(); return false;">Create a channel</a>
         </div>
       </div>
     </div>
@@ -328,6 +332,9 @@
                             </button>
                         </div>
                     </div>
+                    <div class="my-videos-grid" id="myShortsGrid">
+                        <!-- User's shorts will appear here -->
+                    </div>
                 </div>
                 
                 <div class="tab-content" id="liveTab">
@@ -341,6 +348,9 @@
                                 Go Live
                             </button>
                         </div>
+                    </div>
+                    <div class="my-videos-grid" id="myLiveGrid">
+                        <!-- User's live streams will appear here -->
                     </div>
                 </div>
                 
@@ -2140,6 +2150,30 @@
                         <div class="channel-details">
                             <span class="channel-name" id="modalChannelName"></span>
                             <span class="video-stats" id="modalVideoStats"></span>
+                        </div>
+                        <div class="subscribe-section">
+                            <button class="subscribe-btn" id="subscribeBtn">
+                                <span class="subscribe-text">Subscribe</span>
+                            </button>
+                            <div style="position: relative;">
+                                <button class="notification-btn" id="notificationBtn" style="display: none;" title="Notification preferences">
+                                    <i class="fas fa-bell"></i>
+                                </button>
+                                <div class="notification-dropdown" id="notificationDropdown">
+                                    <div class="notification-option" data-value="all">
+                                        <i class="fas fa-bell"></i>
+                                        <span>All</span>
+                                    </div>
+                                    <div class="notification-option" data-value="personalized">
+                                        <i class="fas fa-bell-slash"></i>
+                                        <span>Personalized</span>
+                                    </div>
+                                    <div class="notification-option" data-value="none">
+                                        <i class="fas fa-bell-slash"></i>
+                                        <span>None</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="video-actions">

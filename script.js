@@ -1,6 +1,28 @@
 // TikTik - YouTube Clone Application
 // Pure JavaScript implementation with local storage persistence
 
+// Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBlWjogX3gTipSJK31AwVw0D6KxDv3ry7Y",
+  authDomain: "tiktikvideos-4e8e7.firebaseapp.com",
+  projectId: "tiktikvideos-4e8e7"
+};
+
+// Initialize Firebase
+let firebaseApp = null;
+let firebaseAuth = null;
+
+// Initialize Firebase when available
+if (typeof firebase !== 'undefined') {
+  try {
+    firebaseApp = firebase.initializeApp(firebaseConfig);
+    firebaseAuth = firebase.auth();
+    console.log('Firebase initialized successfully');
+  } catch (error) {
+    console.error('Firebase initialization error:', error);
+  }
+}
+
 class TikTikApp {
     constructor() {
         this.currentVideo = null;
@@ -15,6 +37,7 @@ class TikTikApp {
         this.channelData = this.loadChannelData();
         this.myShorts = this.loadMyShorts();
         this.liveStreams = this.loadLiveStreams();
+        this.subscriptions = this.loadSubscriptions();
         this.cameraStream = null;
         this.isCameraOn = false;
         this.isMicOn = false;
@@ -1709,6 +1732,34 @@ class TikTikApp {
             saveBtn.classList.remove('active');
         }
 
+        // Update subscribe button state
+        const subscribeBtn = document.getElementById('subscribeBtn');
+        const notificationBtn = document.getElementById('notificationBtn');
+        const isSubscribed = this.isSubscribed(video.channel);
+        
+        if (isSubscribed) {
+            subscribeBtn.innerHTML = '<span class="subscribe-text">Subscribed</span>';
+            subscribeBtn.classList.add('subscribed');
+            notificationBtn.style.display = 'block';
+            
+            // Update notification icon based on preference
+            const preference = this.getNotificationPreference(video.channel);
+            if (preference === 'all') {
+                notificationBtn.classList.add('active');
+                notificationBtn.innerHTML = '<i class="fas fa-bell"></i>';
+            } else if (preference === 'personalized') {
+                notificationBtn.classList.remove('active');
+                notificationBtn.innerHTML = '<i class="fas fa-bell"></i>';
+            } else {
+                notificationBtn.classList.remove('active');
+                notificationBtn.innerHTML = '<i class="fas fa-bell-slash"></i>';
+            }
+        } else {
+            subscribeBtn.innerHTML = '<span class="subscribe-text">Subscribe</span>';
+            subscribeBtn.classList.remove('subscribed');
+            notificationBtn.style.display = 'none';
+        }
+
         // Load comments
         this.loadComments(video.id);
 
@@ -2377,13 +2428,98 @@ class TikTikApp {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
         // Add active class to selected tab and content
-        document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
-        document.getElementById(`${tab}Tab`).classList.add('active');
-
-        // Load content based on selected tab
-        if (tab === 'videos') {
-            this.loadMyVideos();
+        const tabButton = document.querySelector(`[data-tab="${tab}"]`);
+        const tabContent = document.getElementById(`${tab}Tab`);
+        
+        if (tabButton && tabContent) {
+            tabButton.classList.add('active');
+            tabContent.classList.add('active');
         }
+
+        // Load content based on selected tab with smooth transition
+        switch(tab) {
+            case 'videos':
+                this.loadMyVideos();
+                break;
+            case 'shorts':
+                this.loadMyShorts();
+                break;
+            case 'live':
+                this.loadMyLiveStreams();
+                break;
+            case 'playlists':
+                this.showToast('Playlists feature coming soon', 'info');
+                break;
+            case 'about':
+                this.loadChannelAbout();
+                break;
+        }
+    }
+
+    loadMyShorts() {
+        const shortsGrid = document.getElementById('myShortsGrid');
+        if (!shortsGrid) return;
+        
+        shortsGrid.innerHTML = '';
+        
+        if (this.myShorts.length === 0) {
+            return;
+        }
+        
+        this.myShorts.forEach(short => {
+            const shortCard = this.createVideoCard(short);
+            shortsGrid.appendChild(shortCard);
+        });
+    }
+
+    loadMyLiveStreams() {
+        const liveGrid = document.getElementById('myLiveGrid');
+        if (!liveGrid) return;
+        
+        liveGrid.innerHTML = '';
+        
+        if (this.liveStreams.length === 0) {
+            return;
+        }
+        
+        this.liveStreams.forEach(stream => {
+            const streamCard = this.createVideoCard(stream);
+            liveGrid.appendChild(streamCard);
+        });
+    }
+
+    loadChannelAbout() {
+        // Channel about information is already loaded in the HTML
+        // Just update any dynamic content if needed
+        const joinDate = document.getElementById('joinDate');
+        const totalViews = document.getElementById('totalViews');
+        
+        if (joinDate) {
+            joinDate.textContent = this.channelData.joinDate || 'Today';
+        }
+        
+        if (totalViews) {
+            const totalViewCount = this.myVideos.reduce((sum, video) => {
+                const views = parseInt(video.views.replace(/[^0-9]/g, '')) || 0;
+                return sum + views;
+            }, 0);
+            totalViews.textContent = totalViewCount > 0 ? totalViewCount.toLocaleString() : '0';
+        }
+    }
+
+    openCreateChannelModal() {
+        const channelName = prompt('Enter your channel name:');
+        if (!channelName || !channelName.trim()) {
+            this.showToast('Channel name is required', 'error');
+            return;
+        }
+
+        this.channelData.name = channelName.trim();
+        this.channelData.joinDate = new Date().toLocaleDateString();
+        this.saveChannelData();
+        
+        this.showToast('Channel created successfully!', 'success');
+        this.navigateToPage('library');
     }
 
     openShortModal() {
@@ -2544,14 +2680,36 @@ class TikTikApp {
             return;
         }
 
-        // Create new live stream object
+        // Capture frame from camera for thumbnail
+        const preview = document.getElementById('cameraPreview');
+        let thumbnailDataUrl = 'https://pixabay.com/get/g2d6e4de48b7bd3a87afab6e869007196adcc1cb3dfd663e6e585bcffd24c3260ab24ba71895df36ec3dc5902cba221c21d6918c76ffa1876e8ac616c437334eb_1280.jpg';
+        
+        if (preview && preview.srcObject) {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = preview.videoWidth || 320;
+                canvas.height = preview.videoHeight || 180;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+                thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            } catch (e) {
+                console.log('Could not capture thumbnail from camera');
+            }
+        }
+
+        // Create new live stream object with recording capability
         const newLiveStream = {
             id: Date.now().toString(),
             title: title,
             channel: this.channelData.name,
-            avatar: 'https://pixabay.com/get/g1882a617f55023cde87198feea9e830686b0a69ae7f315295cebe2b111a575a3d2dd94672359c9d34b332edd722a8e7d502b680acae2e35040353fd2a2ee0f9a_1280.jpg',
-            thumbnail: 'https://pixabay.com/get/g2d6e4de48b7bd3a87afab6e869007196adcc1cb3dfd663e6e585bcffd24c3260ab24ba71895df36ec3dc5902cba221c21d6918c76ffa1876e8ac616c437334eb_1280.jpg',
+            avatar: this.channelData.avatar || 'https://pixabay.com/get/g1882a617f55023cde87198feea9e830686b0a69ae7f315295cebe2b111a575a3d2dd94672359c9d34b332edd722a8e7d502b680acae2e35040353fd2a2ee0f9a_1280.jpg',
+            thumbnail: thumbnailDataUrl,
+            duration: 'LIVE',
+            views: '0 viewers',
+            uploadTime: 'Live now',
+            likes: 0,
             description: description,
+            videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
             category: category,
             privacy: privacy,
             startTime: new Date().toISOString(),
@@ -2559,17 +2717,44 @@ class TikTikApp {
             isLive: true
         };
 
-        // Add to live streams
+        // Add to live streams and save
         this.liveStreams.push(newLiveStream);
         this.saveLiveStreams();
 
-        this.closeLiveModal();
-        this.showToast('Live stream started successfully!', 'success');
+        // Also add to main videos array for visibility
+        this.videos.unshift(newLiveStream);
 
-        // In a real app, this would connect to a streaming server
+        // Update channel stats
+        this.channelData.videoCount = this.myVideos.length + this.myShorts.length + this.liveStreams.length;
+        this.saveChannelData();
+
+        this.closeLiveModal();
+        this.showToast('Live stream started and saved successfully!', 'success');
+
+        // Refresh pages
+        if (this.currentPage === 'library') {
+            this.loadLibraryPage();
+        } else {
+            this.loadHomePage();
+        }
+
+        // Simulate live stream ending and converting to video after some time
         setTimeout(() => {
-            this.showToast('Live stream ended', 'info');
-        }, 5000);
+            const streamIndex = this.liveStreams.findIndex(s => s.id === newLiveStream.id);
+            if (streamIndex !== -1) {
+                this.liveStreams[streamIndex].isLive = false;
+                this.liveStreams[streamIndex].duration = '15:30';
+                this.liveStreams[streamIndex].views = '125 views';
+                this.liveStreams[streamIndex].uploadTime = 'Streamed 1 minute ago';
+                this.saveLiveStreams();
+                this.showToast('Live stream ended and saved to your channel', 'success');
+                
+                // Refresh if on library page
+                if (this.currentPage === 'library') {
+                    this.loadLibraryPage();
+                }
+            }
+        }, 10000); // End stream after 10 seconds for demo
     }
 
     clearHistory() {
@@ -2690,6 +2875,59 @@ class TikTikApp {
 
     saveLiveStreams() {
         localStorage.setItem('tiktik_live_streams', JSON.stringify(this.liveStreams));
+    }
+
+    loadSubscriptions() {
+        const saved = localStorage.getItem('tiktik_subscriptions');
+        return saved ? JSON.parse(saved) : {};
+    }
+
+    saveSubscriptions() {
+        localStorage.setItem('tiktik_subscriptions', JSON.stringify(this.subscriptions));
+    }
+
+    isSubscribed(channelName) {
+        return this.subscriptions.hasOwnProperty(channelName);
+    }
+
+    subscribe(channelName) {
+        if (!this.isSubscribed(channelName)) {
+            this.subscriptions[channelName] = {
+                subscribedAt: new Date().toISOString(),
+                notificationPreference: 'all'
+            };
+            this.saveSubscriptions();
+            this.showToast(`Subscribed to ${channelName}`, 'success');
+            return true;
+        }
+        return false;
+    }
+
+    unsubscribe(channelName) {
+        if (this.isSubscribed(channelName)) {
+            delete this.subscriptions[channelName];
+            this.saveSubscriptions();
+            this.showToast(`Unsubscribed from ${channelName}`, 'info');
+            return true;
+        }
+        return false;
+    }
+
+    setNotificationPreference(channelName, preference) {
+        if (this.isSubscribed(channelName)) {
+            this.subscriptions[channelName].notificationPreference = preference;
+            this.saveSubscriptions();
+            const messages = {
+                'all': 'All notifications enabled',
+                'personalized': 'Personalized notifications enabled',
+                'none': 'Notifications turned off'
+            };
+            this.showToast(messages[preference] || 'Notification preference updated', 'success');
+        }
+    }
+
+    getNotificationPreference(channelName) {
+        return this.isSubscribed(channelName) ? this.subscriptions[channelName].notificationPreference : 'none';
     }
 
     formatNumber(num) {
@@ -2926,28 +3164,89 @@ class TikTikApp {
     toggleProfileMenu();
   }
 
-// Simple Google Sign-in simulation (mock for demo purposes)
+// Real Google Sign-in with Firebase Authentication
 function signInWithGoogle() {
-  const mockUser = {
-    displayName: 'Demo User',
-    email: 'demo@tiktik.com',
+  // Check if Firebase is initialized
+  if (!firebaseAuth) {
+    console.error('Firebase not initialized, using fallback');
+    signInWithGoogleFallback();
+    return;
+  }
+
+  // Create Google Auth Provider
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({
+    prompt: 'select_account'
+  });
+
+  // Sign in with popup
+  firebaseAuth.signInWithPopup(provider)
+    .then((result) => {
+      // Get user info
+      const user = result.user;
+      const userData = {
+        displayName: user.displayName || 'User',
+        email: user.email,
+        photoURL: user.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&h=150&fit=crop',
+        uid: user.uid
+      };
+
+      // Save user to localStorage
+      localStorage.setItem('tiktik_user', JSON.stringify(userData));
+
+      // Update UI
+      updateUIAfterLogin(userData);
+
+      if (window.tiktikApp) {
+        window.tiktikApp.channelData.name = userData.displayName;
+        window.tiktikApp.saveChannelData();
+        window.tiktikApp.showToast('Signed in successfully with Google!', 'success');
+      }
+    })
+    .catch((error) => {
+      console.error('Google Sign-in Error:', error);
+      if (window.tiktikApp) {
+        window.tiktikApp.showToast('Sign-in failed: ' + error.message, 'error');
+      }
+    });
+}
+
+// Fallback sign-in for when Firebase is not available
+function signInWithGoogleFallback() {
+  const name = prompt("Enter your name:") || "Guest User";
+  const email = prompt("Enter your email:") || "guest@tiktik.com";
+  
+  if (!name || !email) {
+    if (window.tiktikApp) {
+      window.tiktikApp.showToast('Login cancelled', 'info');
+    }
+    return;
+  }
+
+  const userData = {
+    displayName: name,
+    email: email,
     photoURL: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&h=150&fit=crop'
   };
 
-  // Save user to localStorage
-  localStorage.setItem('tiktik_user', JSON.stringify(mockUser));
-
-  // UI Update
-  document.getElementById("googleLoginBtn").style.display = "none";
-  document.getElementById("profile-container").style.display = "flex";
-  document.getElementById("profile-pic").src = mockUser.photoURL;
-  document.getElementById("profile-avatar").src = mockUser.photoURL;
-  document.getElementById("profile-name").innerText = mockUser.displayName;
-  document.getElementById("profile-email").innerText = mockUser.email;
+  localStorage.setItem('tiktik_user', JSON.stringify(userData));
+  updateUIAfterLogin(userData);
 
   if (window.tiktikApp) {
-    window.tiktikApp.showToast('Signed in successfully', 'success');
+    window.tiktikApp.channelData.name = name;
+    window.tiktikApp.saveChannelData();
+    window.tiktikApp.showToast('Signed in successfully as ' + name, 'success');
   }
+}
+
+// Update UI after successful login
+function updateUIAfterLogin(userData) {
+  document.getElementById("googleLoginBtn").style.display = "none";
+  document.getElementById("profile-container").style.display = "flex";
+  document.getElementById("profile-pic").src = userData.photoURL;
+  document.getElementById("profile-avatar").src = userData.photoURL;
+  document.getElementById("profile-name").innerText = userData.displayName;
+  document.getElementById("profile-email").innerText = userData.email;
 }
 
 function logout() {
@@ -2962,6 +3261,110 @@ function logout() {
     window.tiktikApp.showToast('Signed out successfully', 'info');
   }
   
+  toggleProfileMenu();
+}
+
+// Profile menu functions
+function switchAccount() {
+  if (window.tiktikApp) {
+    window.tiktikApp.showToast('Switch account feature coming soon', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openTikTikStudio() {
+  if (window.tiktikApp) {
+    window.tiktikApp.navigateToPage('library');
+    window.tiktikApp.showToast('Opening TikTik Studio...', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openCreatorAcademy() {
+  if (window.tiktikApp) {
+    window.tiktikApp.showToast('Opening Creator Academy...', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openPurchases() {
+  if (window.tiktikApp) {
+    window.tiktikApp.showToast('Opening Purchases and Memberships...', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openYourData() {
+  if (window.tiktikApp) {
+    window.tiktikApp.navigateToPage('settings');
+    window.tiktikApp.showToast('Opening Your Data settings...', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openAppearance() {
+  if (window.tiktikApp) {
+    window.tiktikApp.toggleTheme();
+  }
+  toggleProfileMenu();
+}
+
+function openLanguage() {
+  if (window.tiktikApp) {
+    window.tiktikApp.navigateToPage('settings');
+    window.tiktikApp.showToast('Opening Language settings...', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openRestrictedMode() {
+  if (window.tiktikApp) {
+    window.tiktikApp.showToast('Restricted Mode toggle coming soon', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openLocation() {
+  if (window.tiktikApp) {
+    window.tiktikApp.navigateToPage('settings');
+    window.tiktikApp.showToast('Opening Location settings...', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openKeyboardShortcuts() {
+  if (window.tiktikApp) {
+    window.tiktikApp.showToast('Keyboard Shortcuts: Space=Play/Pause, ←→=Seek, ↑↓=Volume, F=Fullscreen, M=Mute', 'info');
+  }
+  toggleProfileMenu();
+}
+
+function openSettings() {
+  if (window.tiktikApp) {
+    window.tiktikApp.navigateToPage('settings');
+  }
+  toggleProfileMenu();
+}
+
+function openHelp() {
+  if (window.tiktikApp) {
+    window.tiktikApp.navigateToPage('help');
+  }
+  toggleProfileMenu();
+}
+
+function sendFeedback() {
+  if (window.tiktikApp) {
+    window.tiktikApp.navigateToPage('feedback');
+  }
+  toggleProfileMenu();
+}
+
+// Create Channel button function
+function createChannel() {
+  if (window.tiktikApp) {
+    window.tiktikApp.openCreateChannelModal();
+  }
   toggleProfileMenu();
 }
 
@@ -2982,6 +3385,77 @@ window.addEventListener('DOMContentLoaded', () => {
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.tiktikApp = new TikTikApp();
+
+    // Subscribe button functionality
+    const subscribeBtn = document.getElementById('subscribeBtn');
+    if (subscribeBtn) {
+        subscribeBtn.addEventListener('click', function() {
+            if (!window.tiktikApp || !window.tiktikApp.currentVideo) return;
+            
+            const channelName = window.tiktikApp.currentVideo.channel;
+            const isSubscribed = window.tiktikApp.isSubscribed(channelName);
+            
+            if (isSubscribed) {
+                window.tiktikApp.unsubscribe(channelName);
+                this.innerHTML = '<span class="subscribe-text">Subscribe</span>';
+                this.classList.remove('subscribed');
+                document.getElementById('notificationBtn').style.display = 'none';
+            } else {
+                window.tiktikApp.subscribe(channelName);
+                this.innerHTML = '<span class="subscribe-text">Subscribed</span>';
+                this.classList.add('subscribed');
+                document.getElementById('notificationBtn').style.display = 'block';
+            }
+        });
+    }
+
+    // Notification bell button functionality
+    const notificationBtn = document.getElementById('notificationBtn');
+    const notificationDropdown = document.getElementById('notificationDropdown');
+    
+    if (notificationBtn && notificationDropdown) {
+        notificationBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            notificationDropdown.classList.toggle('show');
+        });
+
+        // Handle notification preference selection
+        const notificationOptions = notificationDropdown.querySelectorAll('.notification-option');
+        notificationOptions.forEach(option => {
+            option.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (!window.tiktikApp || !window.tiktikApp.currentVideo) return;
+                
+                const preference = this.getAttribute('data-value');
+                const channelName = window.tiktikApp.currentVideo.channel;
+                
+                window.tiktikApp.setNotificationPreference(channelName, preference);
+                
+                // Update UI
+                notificationOptions.forEach(opt => opt.classList.remove('selected'));
+                this.classList.add('selected');
+                
+                // Update bell icon
+                if (preference === 'all') {
+                    notificationBtn.classList.add('active');
+                    notificationBtn.innerHTML = '<i class="fas fa-bell"></i>';
+                } else if (preference === 'personalized') {
+                    notificationBtn.classList.remove('active');
+                    notificationBtn.innerHTML = '<i class="fas fa-bell"></i>';
+                } else {
+                    notificationBtn.classList.remove('active');
+                    notificationBtn.innerHTML = '<i class="fas fa-bell-slash"></i>';
+                }
+                
+                notificationDropdown.classList.remove('show');
+            });
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function() {
+            notificationDropdown.classList.remove('show');
+        });
+    }
 
     // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
