@@ -2442,7 +2442,7 @@ class TikTikApp {
                 this.loadMyVideos();
                 break;
             case 'shorts':
-                this.loadMyShorts();
+                this.displayMyShorts();
                 break;
             case 'live':
                 this.loadMyLiveStreams();
@@ -2456,7 +2456,7 @@ class TikTikApp {
         }
     }
 
-    loadMyShorts() {
+    displayMyShorts() {
         const shortsGrid = document.getElementById('myShortsGrid');
         if (!shortsGrid) return;
         
@@ -2743,9 +2743,9 @@ class TikTikApp {
             const streamIndex = this.liveStreams.findIndex(s => s.id === newLiveStream.id);
             if (streamIndex !== -1) {
                 this.liveStreams[streamIndex].isLive = false;
-                this.liveStreams[streamIndex].duration = '15:30';
-                this.liveStreams[streamIndex].views = '125 views';
-                this.liveStreams[streamIndex].uploadTime = 'Streamed 1 minute ago';
+                this.liveStreams[streamIndex].duration = '25:45';
+                this.liveStreams[streamIndex].views = '325 views';
+                this.liveStreams[streamIndex].uploadTime = 'Streamed 30 minutes ago';
                 this.saveLiveStreams();
                 this.showToast('Live stream ended and saved to your channel', 'success');
                 
@@ -2754,7 +2754,7 @@ class TikTikApp {
                     this.loadLibraryPage();
                 }
             }
-        }, 10000); // End stream after 10 seconds for demo
+        }, 1800000); // End stream after 30 minutes
     }
 
     clearHistory() {
