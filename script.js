@@ -11,12 +11,14 @@ const firebaseConfig = {
 // Initialize Firebase
 let firebaseApp = null;
 let firebaseAuth = null;
+let firestore = null;
 
 // Initialize Firebase when available
 if (typeof firebase !== 'undefined') {
   try {
     firebaseApp = firebase.initializeApp(firebaseConfig);
     firebaseAuth = firebase.auth();
+    firestore = firebase.firestore();
     console.log('Firebase initialized successfully');
   } catch (error) {
     console.error('Firebase initialization error:', error);
@@ -33,88 +35,21 @@ class TikTikApp {
         this.likedVideos = this.loadLikedVideos();
         this.savedVideos = this.loadSavedVideos();
         this.comments = this.loadComments();
-        this.myVideos = this.loadMyVideosFromStorage();
+        this.myVideos = [];
         this.channelData = this.loadChannelData();
-        this.myShorts = this.loadMyShorts();
-        this.liveStreams = this.loadLiveStreams();
+        this.myShorts = [];
+        this.liveStreams = [];
         this.subscriptions = this.loadSubscriptions();
         this.cameraStream = null;
+        this.mediaRecorder = null;
+        this.recordedChunks = [];
         this.isCameraOn = false;
         this.isMicOn = false;
+        this.isRecording = false;
+        this.currentUserId = null;
 
-        // Video data with proper working thumbnail URLs
-        this.videos = [
-            {
-                id: '1',
-                title: 'Amazing Sunset Timelapse - Nature\'s Beauty Unveiled',
-                channel: 'NatureFilms HD',
-                avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=64&h=64&fit=crop&crop=face',
-                thumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=320&h=180&fit=crop',
-                duration: '4:23',
-                views: '1.2M views',
-                uploadTime: '2 days ago',
-                likes: 24580,
-                description: 'Experience the breathtaking beauty of nature with this stunning sunset timelapse captured over the Pacific Ocean.',
-                videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-                category: 'general'
-            },
-            {
-                id: '2',
-                title: 'Modern Web Development Tutorial - React & JavaScript',
-                channel: 'CodeMaster',
-                avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=64&h=64&fit=crop&crop=face',
-                thumbnail: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=320&h=180&fit=crop',
-                duration: '45:17',
-                views: '856K views',
-                uploadTime: '1 week ago',
-                likes: 18750,
-                description: 'Learn modern web development with React, JavaScript ES6+, and best practices for building scalable applications.',
-                videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-                category: 'learning'
-            },
-            {
-                id: '3',
-                title: 'Epic Gaming Moments - Best Highlights 2024',
-                channel: 'GameWorld Pro',
-                avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=64&h=64&fit=crop&crop=face',
-                thumbnail: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=320&h=180&fit=crop',
-                duration: '12:45',
-                views: '2.1M views',
-                uploadTime: '3 days ago',
-                likes: 45620,
-                description: 'The most incredible gaming moments and epic wins from top streamers around the world.',
-                videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-                category: 'gaming'
-            },
-            {
-                id: '4',
-                title: 'Healthy Morning Routine - Transform Your Life',
-                channel: 'Wellness Journey',
-                avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=64&h=64&fit=crop&crop=face',
-                thumbnail: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=320&h=180&fit=crop',
-                duration: '8:32',
-                views: '745K views',
-                uploadTime: '5 days ago',
-                likes: 12340,
-                description: 'Start your day right with this simple yet effective morning routine that will boost your energy and productivity.',
-                videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-                category: 'general'
-            },
-            {
-                id: '5',
-                title: 'Latest Music Hits 2024 - Top Songs Compilation',
-                channel: 'MusicVibes',
-                avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=64&h=64&fit=crop&crop=face',
-                thumbnail: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=320&h=180&fit=crop',
-                duration: '25:18',
-                views: '3.4M views',
-                uploadTime: '1 day ago',
-                likes: 67890,
-                description: 'The hottest music tracks of 2024 featuring popular artists and trending songs.',
-                videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-                category: 'music'
-            }
-        ];
+        // Videos array - populated from Firestore
+        this.videos = [];
 
         this.init();
     }
@@ -122,25 +57,150 @@ class TikTikApp {
     init() {
         this.setupEventListeners();
         this.applyTheme();
-        this.mergeUploadedVideos();
+        this.loadAllVideosFromFirestore();
         this.loadHomePage();
         this.updateAdminSettings();
+        this.setupAuthStateListener();
     }
 
-     mergeUploadedVideos() {
-        // Merge uploaded videos from localStorage into main videos array
-        if (this.myVideos && this.myVideos.length > 0) {
-            // Add uploaded videos to the beginning of the videos array
-            // Remove any duplicates based on video ID
-            const existingIds = new Set(this.videos.map(v => v.id));
-            this.myVideos.forEach(video => {
-                if (!existingIds.has(video.id)) {
-                    this.videos.unshift(video);
-                    existingIds.add(video.id);
+    // Setup Firebase authentication state listener
+    setupAuthStateListener() {
+        if (firebaseAuth) {
+            firebaseAuth.onAuthStateChanged(async (user) => {
+                if (user) {
+                    this.currentUserId = user.uid;
+                    console.log('User logged in:', user.uid);
+                    // Load user's videos when they log in
+                    await this.loadUserVideos();
+                } else {
+                    this.currentUserId = null;
+                    console.log('User logged out');
                 }
             });
         }
     }
+
+    // Load ALL videos from Firestore for main feed
+    async loadAllVideosFromFirestore() {
+        if (!firestore) {
+            console.warn('Firestore not initialized, using default videos');
+            return;
+        }
+
+        try {
+            const videosSnapshot = await firestore.collection('videos')
+                .orderBy('timestamp', 'desc')
+                .limit(50)
+                .get();
+
+            const firestoreVideos = [];
+            videosSnapshot.forEach(doc => {
+                const data = doc.data();
+                firestoreVideos.push({
+                    id: doc.id,
+                    ...data,
+                    views: this.formatNumber(data.views || 0) + ' views',
+                    uploadTime: this.formatUploadTime(data.timestamp),
+                });
+            });
+
+            // Merge with default videos
+            this.videos = [...firestoreVideos, ...this.videos];
+            this.loadHomePage();
+        } catch (error) {
+            console.error('Error loading videos from Firestore:', error);
+        }
+    }
+
+    // Load ONLY current user's videos for "My Channel"
+    async loadUserVideos() {
+        if (!firestore || !this.currentUserId) return;
+
+        try {
+            // Load regular videos
+            const videosSnapshot = await firestore.collection('videos')
+                .where('uploaderId', '==', this.currentUserId)
+                .where('isShort', '==', false)
+                .where('isLive', '==', false)
+                .orderBy('timestamp', 'desc')
+                .get();
+
+            this.myVideos = [];
+            videosSnapshot.forEach(doc => {
+                const data = doc.data();
+                this.myVideos.push({
+                    id: doc.id,
+                    ...data,
+                    views: this.formatNumber(data.views || 0) + ' views',
+                    uploadTime: this.formatUploadTime(data.timestamp),
+                });
+            });
+
+            // Load shorts
+            const shortsSnapshot = await firestore.collection('videos')
+                .where('uploaderId', '==', this.currentUserId)
+                .where('isShort', '==', true)
+                .orderBy('timestamp', 'desc')
+                .get();
+
+            this.myShorts = [];
+            shortsSnapshot.forEach(doc => {
+                const data = doc.data();
+                this.myShorts.push({
+                    id: doc.id,
+                    ...data,
+                    views: this.formatNumber(data.views || 0) + ' views',
+                    uploadTime: this.formatUploadTime(data.timestamp),
+                });
+            });
+
+            // Load live streams
+            const liveSnapshot = await firestore.collection('videos')
+                .where('uploaderId', '==', this.currentUserId)
+                .where('isLive', '==', true)
+                .orderBy('timestamp', 'desc')
+                .get();
+
+            this.liveStreams = [];
+            liveSnapshot.forEach(doc => {
+                const data = doc.data();
+                this.liveStreams.push({
+                    id: doc.id,
+                    ...data,
+                    views: this.formatNumber(data.viewers || 0) + ' viewers',
+                    uploadTime: data.endTime ? this.formatUploadTime(data.endTime) : 'Live now',
+                });
+            });
+
+            // Update channel page if currently viewing
+            if (this.currentPage === 'library') {
+                this.loadLibraryPage();
+            }
+        } catch (error) {
+            console.error('Error loading user videos:', error);
+        }
+    }
+
+    formatUploadTime(timestamp) {
+        if (!timestamp) return 'Just now';
+        
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffSecs = Math.floor(diffMs / 1000);
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffSecs < 60) return 'Just now';
+        if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+        if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+        if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+        if (diffDays < 365) return `${Math.floor(diffDays / 30)} month${Math.floor(diffDays / 30) > 1 ? 's' : ''} ago`;
+        return `${Math.floor(diffDays / 365)} year${Math.floor(diffDays / 365) > 1 ? 's' : ''} ago`;
+    }
+
     
    setupEventListeners() {
         // Sidebar toggle
@@ -2127,7 +2187,7 @@ class TikTikApp {
 }
 
 
-    publishVideo() {
+    async publishVideo() {
         const title = document.getElementById('videoTitle').value.trim();
         const description = document.getElementById('videoDescription').value.trim();
         const category = document.getElementById('videoCategory').value;
@@ -2142,75 +2202,57 @@ class TikTikApp {
             return;
         }
 
-        this.showToast('Uploading video...', 'info');
+        if (!this.currentUserId) {
+            this.showToast('Please login first', 'error');
+            return;
+        }
 
-        // Generate thumbnail first
-        this.generateThumbnailAsDataURL(this.tempUploadedVideo, (thumbnailDataUrl) => {
-            if (!thumbnailDataUrl) {
-                this.showToast('Error generating thumbnail', 'error');
-                return;
+        try {
+            this.showLoading();
+            this.showToast('Uploading video to cloud storage...', 'info');
+
+            // Upload video to R2
+            const videoUrl = await uploadVideoToR2(this.tempUploadedVideo);
+
+            // Save to Firestore
+            if (firestore) {
+                await firestore.collection('videos').add({
+                    uploaderId: this.currentUserId,
+                    title: title,
+                    description: description,
+                    category: category,
+                    videoUrl: videoUrl,
+                    channel: this.channelData.name,
+                    avatar: this.channelData.avatar || '',
+                    thumbnail: videoUrl,
+                    isShort: false,
+                    isLive: false,
+                    views: 0,
+                    likes: 0,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                });
             }
 
-            // Convert video to data URL for persistent storage
-            this.fileToDataURL(this.tempUploadedVideo, (videoDataUrl) => {
-                if (!videoDataUrl) {
-                    this.showToast('Error uploading video', 'error');
-                    return;
-                }
+            this.hideLoading();
+            this.tempUploadedVideo = null;
+            this.closeUploadModal();
+            this.showToast('Video uploaded successfully!', 'success');
 
-                try {
-                    // Create new video object
-                    const newVideo = {
-                        id: Date.now().toString(),
-                        title: title,
-                        channel: this.channelData.name,
-                        avatar: this.channelData.avatar || 'https://pixabay.com/get/g1882a617f55023cde87198feea9e830686b0a69ae7f315295cebe2b111a575a3d2dd94672359c9d34b332edd722a8e7d502b680acae2e35040353fd2a2ee0f9a_1280.jpg',
-                        thumbnail: thumbnailDataUrl,
-                        duration: '0:00',
-                        views: '0 views',
-                        uploadTime: 'just now',
-                        likes: 0,
-                        description: description,
-                        videoUrl: videoDataUrl,
-                        category: category,
-                        isUserUploaded: true
-                    };
+            // Reload user's videos
+            await this.loadUserVideos();
 
-                    // Add to user's videos
-                    this.myVideos.push(newVideo);
-                    this.videos.unshift(newVideo);
-                    
-                    try {
-                        this.saveMyVideos();
-                    } catch (storageError) {
-                        // localStorage quota exceeded
-                        this.showToast('Storage quota exceeded! Video too large for browser storage.', 'error');
-                        // Remove the video we just added
-                        this.myVideos.pop();
-                        this.videos.shift();
-                        return;
-                    }
-
-                    // Update channel stats
-                    this.channelData.videoCount = this.myVideos.length;
-                    this.saveChannelData();
-
-                    this.tempUploadedVideo = null;
-                    this.closeUploadModal();
-                    this.showToast('Video uploaded successfully!', 'success');
-
-                    // Refresh channel page if currently viewing
-                    if (this.currentPage === 'library') {
-                        this.loadLibraryPage();
-                    } else {
-                        this.loadHomePage();
-                    }
-                } catch (error) {
-                    console.error('Error publishing video:', error);
-                    this.showToast('Error uploading video: ' + error.message, 'error');
-                }
-            });
-        });
+            // Refresh feed and channel page
+            await this.loadAllVideosFromFirestore();
+            if (this.currentPage === 'library') {
+                this.loadLibraryPage();
+            } else {
+                this.loadHomePage();
+            }
+        } catch (error) {
+            this.hideLoading();
+            console.error('Error publishing video:', error);
+            this.showToast('Failed to upload video: ' + error.message, 'error');
+        }
     }
 
     fileToDataURL(file, callback) {
@@ -2558,47 +2600,69 @@ class TikTikApp {
         document.getElementById('shortTitle').value = file.name.replace(/\.[^/.]+$/, '');
     }
 
-    publishShort() {
+    async publishShort() {
         const title = document.getElementById('shortTitle').value.trim();
         const description = document.getElementById('shortDescription').value.trim();
         const category = document.getElementById('shortCategory').value;
+        const fileInput = document.getElementById('shortFileInput');
+        const file = fileInput.files[0];
 
         if (!title) {
             this.showToast('Please enter a title', 'error');
             return;
         }
 
-        // Create new short object
-        const newShort = {
-            id: Date.now().toString(),
-            title: title,
-            channel: this.channelData.name,
-            avatar: 'https://pixabay.com/get/g1882a617f55023cde87198feea9e830686b0a69ae7f315295cebe2b111a575a3d2dd94672359c9d34b332edd722a8e7d502b680acae2e35040353fd2a2ee0f9a_1280.jpg',
-            thumbnail: 'https://pixabay.com/get/g2d6e4de48b7bd3a87afab6e869007196adcc1cb3dfd663e6e585bcffd24c3260ab24ba71895df36ec3dc5902cba221c21d6918c76ffa1876e8ac616c437334eb_1280.jpg',
-            duration: '0:30',
-            views: '0 views',
-            uploadTime: 'now',
-            likes: 0,
-            description: description,
-            videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-            category: category,
-            isShort: true
-        };
+        if (!file) {
+            this.showToast('Please select a video file', 'error');
+            return;
+        }
 
-        // Add to user's shorts
-        this.myShorts.push(newShort);
-        this.saveMyShorts();
+        if (!this.currentUserId) {
+            this.showToast('Please login first', 'error');
+            return;
+        }
 
-        // Update channel stats
-        this.channelData.videoCount = this.myVideos.length + this.myShorts.length;
-        this.saveChannelData();
+        try {
+            this.showLoading();
 
-        this.closeShortModal();
-        this.showToast('Short published successfully!', 'success');
+            // Upload video to R2
+            const videoUrl = await uploadVideoToR2(file);
 
-        // Refresh channel page if currently viewing
-        if (this.currentPage === 'library') {
-            this.loadLibraryPage();
+            // Save to Firestore
+            if (firestore) {
+                await firestore.collection('videos').add({
+                    uploaderId: this.currentUserId,
+                    title: title,
+                    description: description,
+                    category: category,
+                    videoUrl: videoUrl,
+                    channel: this.channelData.name,
+                    avatar: this.channelData.avatar || '',
+                    thumbnail: videoUrl,
+                    isShort: true,
+                    isLive: false,
+                    views: 0,
+                    likes: 0,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                });
+            }
+
+            this.hideLoading();
+            this.closeShortModal();
+            this.showToast('Short published successfully!', 'success');
+
+            // Reload user's shorts
+            await this.loadUserVideos();
+
+            // Refresh feed and channel page
+            await this.loadAllVideosFromFirestore();
+            if (this.currentPage === 'library') {
+                this.loadLibraryPage();
+            }
+        } catch (error) {
+            this.hideLoading();
+            console.error('Error publishing short:', error);
+            this.showToast('Failed to publish short: ' + error.message, 'error');
         }
     }
 
@@ -3469,19 +3533,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 // Wallet and Payment Functions - Added to existing script.js
-
-// Initialize Firestore
-let firestore = null;
-
-// Initialize Firestore when Firebase is ready
-if (typeof firebase !== 'undefined') {
-  try {
-    firestore = firebase.firestore();
-    console.log('Firestore initialized successfully');
-  } catch (error) {
-    console.error('Firestore initialization error:', error);
-  }
-}
 
 // Wallet Management Class
 class WalletManager {

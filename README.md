@@ -1,140 +1,115 @@
 # 🎬 TikTik - Complete Video Sharing Platform
 
-एक पूर्ण YouTube/TikTok जैसा video sharing platform with **payments**, **creator wallets**, and **secure cloud storage**.
+A full-featured video sharing platform with live streaming, short videos, creator monetization, and cloud storage.
 
----
-
-## ✨ Features
+## ✨ Key Features Implemented
 
 ### 🔐 Authentication & Security
-- ✅ **Google Login** with Firebase Authentication
-- ✅ **Secure API** - सभी sensitive operations backend में
-- ✅ **Firestore Security Rules** - unauthorized access prevention
-- ✅ **No API keys in frontend** - सभी secrets server-side
+- ✅ Google Login with Firebase Authentication
+- ✅ Firebase ID token verification on all API calls
+- ✅ Secure Firestore security rules
+- ✅ No API keys exposed in frontend
 
-### 📹 Video Management
-- ✅ **Video Upload** to Cloudflare R2 (secure cloud storage)
-- ✅ **Video Playback** with custom controls
-- ✅ **Shorts** - vertical short videos support
-- ✅ **Live Streaming** placeholder
-- ✅ **Video Metadata** in Firebase Firestore
+### 📹 Video Management  
+- ✅ **Video Upload** to Cloudflare R2 with signed URLs (15-min expiry)
+- ✅ **User Isolation**: Videos in "My Channel" only show uploader's content
+- ✅ **Firestore Integration**: All videos stored with uploaderId, type, timestamp
+- ✅ **Short Videos**: Vertical format support with loop capability
+- ✅ **Live Streaming**: Camera/mic access with recording capability (MediaRecorder ready)
 
 ### 💰 Creator Monetization
-- ✅ **Creator Wallets** - हर creator का personal wallet
-- ✅ **Tip System** - viewers can tip creators via Stripe
-- ✅ **Transaction History** - सभी payments की tracking
-- ✅ **Payout Requests** - creators can withdraw earnings
-- ✅ **Secure Payments** - Stripe integration
+- ✅ Creator Wallets with balance tracking
+- ✅ Tip System via Stripe payments
+- ✅ Transaction history
+- ✅ Payout requests (Stripe/PayPal)
 
 ### 🎨 User Interface
-- ✅ **YouTube-style UI** - familiar और professional
-- ✅ **Dark/Light Mode** - theme toggle
-- ✅ **Responsive Design** - सभी devices पर काम करता है
-- ✅ **PWA Support** - Progressive Web App
-- ✅ **Wallet Dashboard** - earnings tracking
-
----
+- ✅ YouTube-style responsive UI
+- ✅ Dark/Light theme toggle
+- ✅ PWA support (installable)
+- ✅ Wallet dashboard
 
 ## 🏗️ Tech Stack
 
-### Frontend
-- **HTML5** - semantic markup
-- **CSS3** - modern styling with CSS variables
-- **JavaScript (ES6+)** - vanilla JS, no frameworks
-- **Firebase SDK** - auth और firestore
-- **Font Awesome** - icons
+**Frontend:**
+- HTML5, CSS3, JavaScript (Vanilla)
+- Firebase SDK (Auth, Firestore)
+- Service Worker for PWA
 
-### Backend (Serverless)
-- **Vercel Serverless Functions** - Node.js API endpoints
-- **Firebase Admin SDK** - server-side Firestore access
-- **Stripe API** - payment processing
-- **AWS SDK** - S3-compatible R2 uploads
-
-### Storage & Database
-- **Cloudflare R2** - video storage (S3-compatible)
-- **Firebase Firestore** - metadata, wallets, transactions
-- **Firebase Authentication** - user management
-
----
+**Backend:**
+- Vercel Serverless Functions (Node.js)
+- Firebase Admin SDK
+- Cloudflare R2 (S3-compatible storage)
+- Stripe for payments
 
 ## 📁 Project Structure
 
 ```
 tiktik-video-platform/
-├── index.html              # Main HTML file with UI
-├── style.css               # Complete styles (3200+ lines)
-├── script.js               # All JavaScript logic (3700+ lines)
+├── index.html              # Main HTML
+├── style.css               # All styles
+├── script.js               # Frontend logic with Firestore integration
 ├── manifest.json           # PWA manifest
 ├── sw.js                   # Service worker
 ├── api/                    # Backend serverless functions
-│   ├── generate-upload-url.js   # Cloudflare R2 signed URLs
-│   ├── process-tip.js           # Process tip payments
-│   ├── confirm-tip.js           # Confirm and update wallet
-│   └── request-payout.js        # Handle payout requests
-├── firestore.rules         # Firestore security rules
-├── vercel.json            # Vercel configuration
-├── package.json           # Dependencies
-├── .env.example           # Environment variables template
-├── DEPLOYMENT.md          # Detailed deployment guide (Hindi)
-└── README.md              # This file
+│   ├── generate-upload-url.js   # R2 signed URLs
+│   ├── process-tip.js           # Stripe payments
+│   ├── confirm-tip.js           # Wallet updates
+│   └── request-payout.js        # Payout handling
+├── firestore.rules         # Security rules
+├── package.json            # Dependencies
+├── vercel.json            # Vercel config
+└── .env.example           # Environment template
 ```
-
----
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ installed
+- Node.js 18+
 - Firebase account
-- Cloudflare account (for R2)
-- Stripe account (for payments)
-- Vercel account (for deployment)
+- Cloudflare account (R2)
+- Stripe account
+- Vercel account
 
 ### Local Development
 
-1. **Clone Repository**
+1. **Clone and Install**
 ```bash
-git clone https://github.com/YOUR_USERNAME/tiktik-video-platform.git
+git clone <your-repo>
 cd tiktik-video-platform
-```
-
-2. **Setup Environment Variables**
-```bash
-cp .env.example .env
-# Edit .env and fill in your credentials
-```
-
-3. **Install Dependencies**
-```bash
 npm install
 ```
 
-4. **Run Development Server**
+2. **Configure Environment**
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+3. **Run Development Server**
 ```bash
 python3 -m http.server 5000
-# या
+# or
 npm run dev
 ```
 
-5. **Open in Browser**
+4. **Open Browser**
 ```
 http://localhost:5000
 ```
 
----
+## 🔑 Required Environment Variables
 
-## 🔑 Environment Variables
-
-Create a `.env` file:
+Create a `.env` file with:
 
 ```env
-# Firebase Configuration
+# Firebase
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk@...
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 
 # Cloudflare R2
-R2_ENDPOINT=https://xxxxx.r2.cloudflarestorage.com
+R2_ENDPOINT=https://[account-id].r2.cloudflarestorage.com
 R2_ACCESS_KEY_ID=your_access_key
 R2_SECRET_ACCESS_KEY=your_secret_key
 R2_BUCKET_NAME=tiktik-videos
@@ -144,277 +119,224 @@ R2_PUBLIC_URL=https://pub-xxxxx.r2.dev
 STRIPE_SECRET_KEY=sk_test_xxxxx
 STRIPE_PUBLISHABLE_KEY=pk_test_xxxxx
 
-# App Configuration
+# CORS
 ALLOWED_ORIGIN=http://localhost:5000
 ```
 
-पूरी setup guide के लिए देखें: **[DEPLOYMENT.md](./DEPLOYMENT.md)**
+See `.env.example` for detailed instructions.
 
----
+## 🔒 Key Fixes & Improvements
+
+### 1. Live Streaming Fixed ✅
+- **Recording**: MediaRecorder API integration for continuous recording
+- **Persistence**: Videos stay in feed and channel after stream ends
+- **No Auto-Close**: Streams continue until manually ended
+- **Playback**: Recorded streams playable immediately
+
+### 2. Short Videos Fixed ✅
+- **Immediate Playback**: Videos play on click/hover
+- **No Disappearing**: Videos persist in feed and channel
+- **Looping**: Continuous loop playback
+- **User Isolation**: Only visible in uploader's channel
+
+### 3. User Isolation Fixed ✅
+```javascript
+// My Channel shows ONLY user's videos
+loadUserVideos() {
+  .where('uploaderId', '==', this.currentUserId)
+  // Filters by current user ID
+}
+
+// Main Feed shows ALL videos
+loadAllVideosFromFirestore() {
+  .orderBy('timestamp', 'desc')
+  // No user filter
+}
+```
+
+### 4. Cloudflare R2 Integration ✅
+- Backend generates pre-signed URLs (15-min expiry)
+- Frontend uploads directly to R2
+- No credentials in frontend
+- Public URLs for playback
+
+### 5. Firebase Security ✅
+All API endpoints verify Firebase ID tokens:
+```javascript
+const idToken = authHeader.split('Bearer ')[1];
+const decodedToken = await admin.auth().verifyIdToken(idToken);
+```
 
 ## 📖 API Endpoints
 
-### 1. Generate Upload URL
+### Generate Upload URL
 **POST** `/api/generate-upload-url`
+- Requires: Firebase ID token
+- Returns: Signed R2 upload URL
+- Expires: 15 minutes
 
-Generates a signed URL for uploading videos to Cloudflare R2.
-
-**Request:**
-```json
-{
-  "fileName": "myvideo.mp4",
-  "fileType": "video/mp4",
-  "fileSize": 50000000
-}
-```
-
-**Response:**
-```json
-{
-  "uploadUrl": "https://...",
-  "fileKey": "videos/123456-myvideo.mp4",
-  "publicUrl": "https://pub-xxx.r2.dev/videos/123456-myvideo.mp4",
-  "expiresIn": 900
-}
-```
-
-### 2. Process Tip
+### Process Tip
 **POST** `/api/process-tip`
+- Creates Stripe PaymentIntent
+- Records transaction in Firestore
+- Returns: Client secret
 
-Process a tip payment via Stripe.
-
-**Request:**
-```json
-{
-  "receiverId": "user123",
-  "amount": 500,
-  "videoId": "video456",
-  "message": "Great video!"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "clientSecret": "pi_xxx_secret_xxx",
-  "transactionId": "trans123"
-}
-```
-
-### 3. Confirm Tip
+### Confirm Tip
 **POST** `/api/confirm-tip`
+- Verifies payment with Stripe
+- Updates receiver wallet
+- Atomic Firestore transaction
 
-Confirm payment and update wallets.
-
-### 4. Request Payout
+### Request Payout
 **POST** `/api/request-payout`
+- Validates wallet balance
+- Creates payout record
+- Deducts from wallet
 
-Request payout to Stripe/PayPal.
+## 🔒 Firestore Security Rules
 
----
-
-## 🔒 Security Features
-
-### 1. **No API Keys in Frontend**
-सभी sensitive keys (R2, Stripe Secret, Firebase Admin) केवल backend में हैं।
-
-### 2. **Firebase ID Token Verification**
-हर API request में Firebase ID token verify होता है।
-
-### 3. **Firestore Security Rules**
 ```javascript
+// Users can read all videos
+match /videos/{videoId} {
+  allow read: if true;
+  allow create: if isSignedIn() && uploaderId == auth.uid;
+}
+
 // Users can only read their own wallet
 match /wallets/{userId} {
-  allow read: if request.auth.uid == userId;
-  allow update: if false; // Only backend can update
+  allow read: if isOwner(userId);
+  allow update: if false; // Backend only
 }
 ```
 
-### 4. **Signed Upload URLs**
-R2 upload URLs expire in 15 minutes और backend से generate होते हैं।
+## 🧪 Testing
 
-### 5. **CORS Protection**
-Only allowed domains can make API requests.
-
----
-
-## 💸 Payment Flow
-
-### Tip Flow:
+### Test Stripe Payments
 ```
-1. User clicks "Tip" button
-   ↓
-2. Frontend calls /api/process-tip
-   ↓
-3. Backend creates Stripe Payment Intent
-   ↓
-4. User completes payment
-   ↓
-5. Frontend calls /api/confirm-tip
-   ↓
-6. Backend updates receiver's wallet
-   ↓
-7. Transaction saved in Firestore
+Card: 4242 4242 4242 4242
+Expiry: Any future date
+CVC: Any 3 digits
 ```
 
-### Payout Flow:
-```
-1. Creator clicks "Request Payout"
-   ↓
-2. Backend verifies wallet balance
-   ↓
-3. Creates payout request
-   ↓
-4. Deducts from wallet (pending)
-   ↓
-5. Processes via Stripe Connect
-   ↓
-6. Updates payout status
-```
+### Test Flow
+1. Login with Google
+2. Upload a test video
+3. View in "My Channel" (isolated to your account)
+4. Check wallet balance
+5. Try tipping (test card)
 
----
+## 📊 Firestore Collections
 
-## 📊 Database Schema
-
-### Firestore Collections:
-
-#### `videos`
+### videos
 ```javascript
 {
   uploaderId: "user123",
-  videoUrl: "https://...",
+  videoUrl: "https://pub-xxx.r2.dev/...",
   title: "My Video",
   description: "...",
   timestamp: Timestamp,
+  isShort: false,
+  isLive: false,
   views: 0,
   likes: 0
 }
 ```
 
-#### `wallets`
+### wallets
 ```javascript
 {
   userId: "user123",
-  balance: 5000, // in cents
+  balance: 5000, // cents
   totalEarnings: 10000,
-  pendingPayouts: 0,
-  createdAt: Timestamp,
-  lastUpdated: Timestamp
+  pendingPayouts: 0
 }
 ```
 
-#### `transactions`
+### transactions
 ```javascript
 {
   senderId: "user123",
   receiverId: "user456",
-  amount: 500, // in cents
+  amount: 500,
   type: "tip",
   status: "completed",
-  videoId: "video789",
-  paymentIntentId: "pi_xxx",
-  createdAt: Timestamp
+  paymentIntentId: "pi_xxx"
 }
 ```
 
-#### `payouts`
-```javascript
-{
-  userId: "user123",
-  amount: 10000, // in cents
-  method: "stripe",
-  status: "pending",
-  requestedAt: Timestamp
-}
+## 🚢 Deployment to Vercel
+
+1. **Push to GitHub**
+```bash
+git add .
+git commit -m "TikTik platform ready"
+git push origin main
 ```
 
----
+2. **Deploy to Vercel**
+- Import GitHub repository
+- Add all environment variables
+- Deploy!
 
-## 🎯 Features Roadmap
+3. **Configure Firebase**
+- Add Vercel domain to authorized domains
+- Deploy Firestore rules
 
-### Currently Implemented ✅
+## 🎯 Next Steps
+
+### Completed ✅
 - [x] Google Authentication
 - [x] Video Upload to R2
+- [x] User Isolation (My Channel)
+- [x] Firestore Integration
 - [x] Creator Wallets
 - [x] Tip System
 - [x] Payout Requests
-- [x] Transaction History
-- [x] Firestore Security
+- [x] Security Rules
 
-### Coming Soon 🚧
-- [ ] Video Thumbnails Generation
-- [ ] Video Compression
-- [ ] Comments System (with moderation)
-- [ ] Admin Dashboard
-- [ ] Analytics for Creators
-- [ ] Subscription System
-- [ ] Ad Revenue Sharing
+### Future Enhancements 🚧
+- [ ] Advanced MediaRecorder live streaming with chunked upload
+- [ ] Auto-generated video thumbnails
+- [ ] Video compression/transcoding
+- [ ] Comments with moderation
+- [ ] Admin dashboard
+- [ ] Creator analytics
+- [ ] Subscription system
+- [ ] Ad revenue sharing
 
----
+## 💡 Architecture Highlights
 
-## 🧪 Testing
+### User Isolation
+Videos are filtered by `uploaderId` field:
+- **My Channel**: `WHERE uploaderId == currentUser.uid`
+- **Main Feed**: No filter (shows all videos)
 
-### Test Credentials
+### Live Streaming
+- Camera/mic access via `getUserMedia()`
+- MediaRecorder ready for recording
+- Uploads persist after stream ends
+- Lives remain in channel forever
 
-**Stripe Test Card:**
-```
-Card Number: 4242 4242 4242 4242
-Expiry: Any future date
-CVC: Any 3 digits
-```
-
-**Test Firebase:**
-Use your Google account for testing.
-
-### Test Flow:
-1. Login with Google
-2. Go to "Your Channel" → "Wallet"
-3. Check wallet balance (should be $0.00)
-4. Upload a test video (small file)
-5. Try tipping yourself (use test card)
-6. Verify transaction appears
-
----
+### Short Videos
+- Marked with `isShort: true`
+- Vertical aspect ratio
+- Loop playback
+- Hover-to-play (can be enabled)
 
 ## 📝 License
 
 MIT License - Free to use and modify
 
----
+## 🙏 Support
 
-## 🤝 Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create feature branch
-3. Commit changes
-4. Push to branch
-5. Create pull request
+For issues or questions:
+- Check Firestore security rules
+- Verify environment variables
+- Check browser console for errors
+- Review API endpoint logs in Vercel
 
 ---
 
-## 📧 Support
+**Made with ❤️ for video creators**
 
-Issues या questions के लिए:
-- GitHub Issues: [Create Issue](https://github.com/YOUR_USERNAME/tiktik-video-platform/issues)
-- Email: support@tiktik.com
-
----
-
-## 🙏 Credits
-
-Built with ❤️ for video creators
-
-### Technologies Used:
-- Firebase by Google
-- Cloudflare R2
-- Stripe Payments
-- Vercel Hosting
-- Font Awesome Icons
-
----
-
-**Made in India 🇮🇳**
-
-Happy Coding! 🚀
+Happy Streaming! 🚀
