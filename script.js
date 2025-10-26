@@ -3468,3 +3468,279 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 });
+// Wallet and Payment Functions - Added to existing script.js
+
+// Initialize Firestore
+let firestore = null;
+
+// Initialize Firestore when Firebase is ready
+if (typeof firebase !== 'undefined') {
+  try {
+    firestore = firebase.firestore();
+    console.log('Firestore initialized successfully');
+  } catch (error) {
+    console.error('Firestore initialization error:', error);
+  }
+}
+
+// Wallet Management Class
+class WalletManager {
+  constructor() {
+    this.currentWallet = null;
+  }
+
+  // Get user wallet from Firestore
+  async getUserWallet(userId) {
+    if (!firestore) {
+      console.error('Firestore not initialized');
+      return null;
+    }
+
+    try {
+      const walletDoc = await firestore.collection('wallets').doc(userId).get();
+      
+      if (walletDoc.exists) {
+        return walletDoc.data();
+      } else {
+        // Create new wallet if doesn't exist
+        const newWallet = {
+          userId: userId,
+          balance: 0,
+          totalEarnings: 0,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        
+        await firestore.collection('wallets').doc(userId).set(newWallet);
+        return newWallet;
+      }
+    } catch (error) {
+      console.error('Error getting wallet:', error);
+      return null;
+    }
+  }
+
+  // Get user transactions
+  async getUserTransactions(userId, limit = 20) {
+    if (!firestore) return [];
+
+    try {
+      const transactions = await firestore.collection('transactions')
+        .where('senderId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get();
+      
+      const received = await firestore.collection('transactions')
+        .where('receiverId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .limit(limit)
+        .get();
+
+      const allTransactions = [];
+      
+      transactions.forEach(doc => {
+        allTransactions.push({ id: doc.id, ...doc.data(), direction: 'sent' });
+      });
+      
+      received.forEach(doc => {
+        allTransactions.push({ id: doc.id, ...doc.data(), direction: 'received' });
+      });
+
+      // Sort by date
+      allTransactions.sort((a, b) => {
+        const aTime = a.createdAt?.toMillis() || 0;
+        const bTime = b.createdAt?.toMillis() || 0;
+        return bTime - aTime;
+      });
+
+      return allTransactions;
+    } catch (error) {
+      console.error('Error getting transactions:', error);
+      return [];
+    }
+  }
+
+  // Send tip to creator
+  async sendTip(receiverId, amount, videoId, message) {
+    try {
+      const user = JSON.parse(localStorage.getItem('tiktik_user') || '{}');
+      
+      if (!user.uid) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get Firebase ID token
+      const idToken = await firebase.auth().currentUser.getIdToken();
+
+      // Call backend API to process tip
+      const response = await fetch('/api/process-tip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          receiverId,
+          amount: Math.round(amount * 100), // Convert to cents
+          videoId,
+          message
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to process tip');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error sending tip:', error);
+      throw error;
+    }
+  }
+
+  // Confirm tip after Stripe payment
+  async confirmTip(transactionId, paymentIntentId) {
+    try {
+      const idToken = await firebase.auth().currentUser.getIdToken();
+
+      const response = await fetch('/api/confirm-tip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          transactionId,
+          paymentIntentId
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to confirm tip');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error confirming tip:', error);
+      throw error;
+    }
+  }
+
+  // Request payout
+  async requestPayout(amount, method = 'stripe') {
+    try {
+      const idToken = await firebase.auth().currentUser.getIdToken();
+
+      const response = await fetch('/api/request-payout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          amount: Math.round(amount * 100), // Convert to cents
+          payoutMethod: method
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to request payout');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error requesting payout:', error);
+      throw error;
+    }
+  }
+
+  // Format currency
+  formatCurrency(cents) {
+    return `\$${(cents / 100).toFixed(2)}`;
+  }
+}
+
+// Initialize wallet manager
+const walletManager = new WalletManager();
+
+// Video Upload to Cloudflare R2 with signed URL
+async function uploadVideoToR2(file) {
+  try {
+    const user = JSON.parse(localStorage.getItem('tiktik_user') || '{}');
+    
+    if (!user.uid) {
+      throw new Error('User not authenticated');
+    }
+
+    // Get Firebase ID token
+    const idToken = await firebase.auth().currentUser.getIdToken();
+
+    // Request signed upload URL from backend
+    const response = await fetch('/api/generate-upload-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to get upload URL');
+    }
+
+    // Upload file to R2 using signed URL
+    const uploadResponse = await fetch(data.uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': file.type,
+      },
+      body: file
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error('Failed to upload video to R2');
+    }
+
+    // Save video metadata to Firestore
+    if (firestore) {
+      await firestore.collection('videos').add({
+        uploaderId: user.uid,
+        videoUrl: data.publicUrl,
+        fileKey: data.fileKey,
+        fileName: file.name,
+        fileSize: file.size,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        title: '',
+        description: '',
+        views: 0,
+        likes: 0
+      });
+    }
+
+    return data.publicUrl;
+  } catch (error) {
+    console.error('Error uploading video to R2:', error);
+    throw error;
+  }
+}
+
+// Add wallet manager to global scope
+if (typeof window !== 'undefined') {
+  window.walletManager = walletManager;
+  window.uploadVideoToR2 = uploadVideoToR2;
+}
+

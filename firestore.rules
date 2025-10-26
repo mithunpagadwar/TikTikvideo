@@ -1,0 +1,105 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Videos collection - metadata for all uploaded videos
+    match /videos/{videoId} {
+      // Anyone can read videos
+      allow read: if true;
+      
+      // Only authenticated users can create videos
+      allow create: if isSignedIn() 
+        && request.resource.data.uploaderId == request.auth.uid
+        && request.resource.data.keys().hasAll(['title', 'videoUrl', 'uploaderId', 'timestamp']);
+      
+      // Only video owner can update their own videos
+      allow update: if isOwner(resource.data.uploaderId);
+      
+      // Only video owner can delete their own videos
+      allow delete: if isOwner(resource.data.uploaderId);
+    }
+    
+    // Wallets collection - one wallet per user
+    match /wallets/{userId} {
+      // Users can only read their own wallet
+      allow read: if isOwner(userId);
+      
+      // Wallets can only be created by the user themselves
+      allow create: if isOwner(userId)
+        && request.resource.data.userId == request.auth.uid;
+      
+      // Users cannot directly update their wallet balance
+      // Only backend functions can update wallets (via admin SDK)
+      allow update: if false;
+      
+      // Users cannot delete their wallets
+      allow delete: if false;
+    }
+    
+    // Transactions collection - payment and tip transactions
+    match /transactions/{transactionId} {
+      // Users can read transactions where they are sender or receiver
+      allow read: if isSignedIn() 
+        && (resource.data.senderId == request.auth.uid 
+            || resource.data.receiverId == request.auth.uid);
+      
+      // Transactions can only be created by backend functions
+      allow create: if false;
+      
+      // Transactions cannot be updated or deleted
+      allow update, delete: if false;
+    }
+    
+    // Payouts collection - payout requests
+    match /payouts/{payoutId} {
+      // Users can only read their own payout requests
+      allow read: if isOwner(resource.data.userId);
+      
+      // Payouts can only be created by backend functions
+      allow create: if false;
+      
+      // Payouts cannot be updated or deleted by users
+      allow update, delete: if false;
+    }
+    
+    // User profiles collection
+    match /users/{userId} {
+      // Anyone can read public profile data
+      allow read: if true;
+      
+      // Users can only create/update their own profile
+      allow create, update: if isOwner(userId);
+      
+      // Users can delete their own profile
+      allow delete: if isOwner(userId);
+    }
+    
+    // Comments collection
+    match /comments/{commentId} {
+      // Anyone can read comments
+      allow read: if true;
+      
+      // Only authenticated users can create comments
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      
+      // Only comment owner can update/delete their comments
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+    
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

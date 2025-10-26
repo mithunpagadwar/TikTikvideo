@@ -24,6 +24,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -297,6 +298,7 @@
                     <button class="channel-tab active" data-tab="videos">Videos</button>
                     <button class="channel-tab" data-tab="shorts">Shorts</button>
                     <button class="channel-tab" data-tab="live">Live</button>
+                    <button class="channel-tab" data-tab="wallet">Wallet</button>
                     <button class="channel-tab" data-tab="playlists">Playlists</button>
                     <button class="channel-tab" data-tab="about">About</button>
                 </div>
@@ -354,6 +356,60 @@
                     </div>
                 </div>
                 
+                <div class="tab-content" id="walletTab">
+                    <div class="wallet-section">
+                        <div class="wallet-header">
+                            <h3><i class="fas fa-wallet"></i> Creator Wallet</h3>
+                            <div class="wallet-balance">
+                                <span class="balance-label">Available Balance</span>
+                                <span class="balance-amount" id="walletBalance">$0.00</span>
+                            </div>
+                        </div>
+                        
+                        <div class="wallet-stats">
+                            <div class="stat-card">
+                                <i class="fas fa-dollar-sign"></i>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="totalEarnings">$0.00</span>
+                                    <span class="stat-label">Total Earnings</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <i class="fas fa-hand-holding-usd"></i>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="pendingPayouts">$0.00</span>
+                                    <span class="stat-label">Pending Payouts</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <i class="fas fa-chart-line"></i>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="monthlyEarnings">$0.00</span>
+                                    <span class="stat-label">This Month</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="wallet-actions">
+                            <button class="btn btn-primary" id="requestPayoutBtn">
+                                <i class="fas fa-money-check-alt"></i>
+                                Request Payout
+                            </button>
+                            <button class="btn btn-secondary" id="viewTransactionsBtn">
+                                <i class="fas fa-history"></i>
+                                Transaction History
+                            </button>
+                        </div>
+
+                        <div class="transactions-section" id="transactionsSection" style="display: none;">
+                            <h4>Transaction History</h4>
+                            <div class="transactions-list" id="transactionsList">
+                                <p class="no-transactions">No transactions yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="tab-content" id="playlistsTab">
                     <div class="empty-state">
                         <i class="fas fa-list"></i>
