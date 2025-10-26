@@ -2,7 +2,7 @@
 
 ## Overview
 
-TikTik is a full-featured video sharing platform combining elements from YouTube and TikTok. Built with vanilla JavaScript, the platform enables users to upload videos, live stream, create short-form vertical videos, and monetize their content through creator wallets and tips. The application uses Firebase for authentication and data storage, Cloudflare R2 for video hosting, and Stripe for payment processing.
+TikTik is a full-featured video sharing platform that combines YouTube and TikTok-style functionality. The platform enables users to upload regular videos, create short-form vertical content, live stream with real-time recording, and monetize their content through creator tips and payouts. Built with vanilla JavaScript on the frontend and serverless functions on the backend, TikTik emphasizes simplicity, security, and scalability while providing a rich user experience with PWA support, dark/light themes, and real-time video management.
 
 ## User Preferences
 
@@ -12,148 +12,94 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 
-**Technology Stack**: Pure vanilla JavaScript (ES6+) with HTML5 and CSS3. No frontend frameworks are used, promoting simplicity and reducing bundle size while maintaining full functionality.
+**Technology Stack**: Pure vanilla JavaScript (ES6+) with HTML5 and CSS3. No frameworks are used to minimize bundle size and complexity. Firebase SDK (v10.7.1 compat) provides authentication and real-time database capabilities.
 
-**UI Design Pattern**: YouTube-inspired interface with a fixed header, collapsible sidebar, and responsive content grid. The application supports dark/light themes through CSS custom properties and data attributes. The layout uses a three-section structure: header (navigation/search), sidebar (menu items), and main content area (video grid/player).
+**Authentication Flow**: Firebase Authentication handles Google Sign-In. The frontend fetches Firebase configuration securely from `/api/get-config` endpoint rather than hardcoding credentials. After authentication, Firebase ID tokens are included in Authorization headers for all API calls.
 
-**State Management**: Class-based architecture centered around the `TikTikApp` class. Client-side state is persisted to localStorage for watch history, liked videos, saved videos, comments, channel data, and subscriptions. User-uploaded videos are stored in Firestore with references managed in the application state.
+**State Management**: Class-based architecture centered on `TikTikApp` class. Application state includes current video, page navigation, sidebar state, user settings (theme), watch history, liked/saved videos, comments, channel data, and subscriptions. State persists to localStorage for non-sensitive data and Firestore for shared/persistent data.
 
-**Authentication**: Firebase Authentication SDK (compat version 10.7.1) handles Google Sign-In. The client initializes Firebase with project configuration and manages auth state. All authenticated API requests include Firebase ID tokens in Authorization headers for server-side verification.
+**Video Management**: Three video types are supported - regular uploads, short-form vertical videos, and live streams. All videos upload directly to Cloudflare R2 using pre-signed URLs (15-minute expiration). The MediaRecorder API captures live streams with camera/microphone access. User isolation ensures "My Channel" displays only videos where `uploaderId` matches the authenticated user.
 
-**Progressive Web App**: Service worker (`sw.js`) provides offline capabilities through cache-first strategies for static assets. The manifest.json defines app metadata, icons (SVG-based), screenshots, and PWA features. Users can install the app on mobile and desktop devices.
+**Progressive Web App**: Service worker (`sw.js`) implements cache-first strategy for static assets (HTML, CSS, JS, fonts). The manifest.json defines app metadata with SVG icons for different resolutions. Supports installation on mobile and desktop with offline viewing capabilities.
 
-**Video Features**:
-- Regular video uploads with metadata stored in Firestore
-- Short videos (vertical format) with loop capabilities
-- Live streaming with camera/microphone access via MediaRecorder API
-- All videos uploaded to Cloudflare R2 through pre-signed URLs
-- User isolation: "My Channel" shows only the uploader's content
-- Videos tagged with uploaderId, type (live/short/regular), and timestamps
+**UI Design**: YouTube-inspired responsive layout with fixed header (60px), collapsible sidebar (250px expanded, 70px collapsed), and flexible content grid. CSS custom properties enable dark/light theme switching. All interactions use event delegation for performance.
 
 ### Backend Architecture
 
-**Serverless Platform**: Vercel Serverless Functions running Node.js (v18+). Each API endpoint is a separate function deployed automatically, providing automatic scaling and zero infrastructure management.
+**Serverless Functions**: Four Node.js serverless functions deployed on Vercel handle all backend operations. Each function is stateless, auto-scaling, and executes independently with 1024MB memory allocation.
 
 **API Endpoints**:
-- `/api/generate-upload-url.js`: Creates pre-signed URLs for Cloudflare R2 uploads with 15-minute expiration. Verifies Firebase ID token before generating URLs.
-- `/api/process-tip.js`: Initiates Stripe payment flow by creating PaymentIntents. Validates tip amounts and user authentication.
-- `/api/confirm-tip.js`: Confirms successful Stripe payments and atomically updates both tipper and creator wallet balances in Firestore.
-- `/api/request-payout.js`: Processes creator payout requests with minimum threshold validation ($10). Creates payout records in Firestore for administrative processing.
+- `/api/get-config.js` - Returns Firebase client configuration (public values only)
+- `/api/generate-upload-url.js` - Creates S3-compatible pre-signed URLs for R2 uploads with 15-minute expiration
+- `/api/process-tip.js` - Initiates Stripe PaymentIntent for creator tips
+- `/api/confirm-tip.js` - Verifies payment success and atomically updates sender/receiver wallet balances
+- `/api/request-payout.js` - Processes creator payout requests with $10 minimum threshold
 
-**Authentication Model**: Firebase Admin SDK verifies ID tokens on every API request. Tokens are extracted from Authorization headers (Bearer scheme). Invalid or missing tokens return 401 errors. User IDs from verified tokens are used for authorization checks.
+**Authentication Strategy**: Firebase Admin SDK verifies ID tokens on every API request (except `/api/get-config`). Tokens are extracted from `Authorization: Bearer <token>` headers. Invalid/missing tokens return 401 errors. Decoded tokens provide `uid` for user identification.
 
-**Security Approach**:
-- All sensitive credentials (R2 keys, Stripe keys, Firebase service account) stored as environment variables
-- CORS headers restrict API access to specific origins (configurable via ALLOWED_ORIGIN)
-- Pre-signed URLs prevent direct storage access
-- Firestore security rules enforce user data isolation
-- No API keys or secrets exposed in frontend code
+**Security Model**:
+- All secrets stored as environment variables (Firebase service account, R2 credentials, Stripe keys)
+- CORS headers restrict access to allowed origins
+- Pre-signed URLs provide time-limited, secure storage access
+- No API keys exposed in frontend code
+- Firestore security rules enforce data isolation at database level
 
-**Error Handling**: API endpoints use try-catch blocks with appropriate HTTP status codes (400 for validation, 401 for auth, 405 for wrong methods, 500 for server errors). All responses include JSON with error messages.
+**Error Handling**: All endpoints return structured JSON responses with appropriate HTTP status codes. CORS preflight requests (OPTIONS) are handled separately. Method validation ensures only expected HTTP methods are processed.
 
 ### Data Storage
 
-**Firebase Firestore**: NoSQL document database storing:
-- **videos collection**: Video metadata including uploaderId, title, description, R2 URL, type (live/short/regular), timestamps, view counts
-- **userWallets collection**: Creator wallet balances tracked in cents, initialized on first tip
-- **transactions collection**: Payment history including tip amounts, payer/recipient IDs, timestamps, and Stripe payment IDs
-- **User profiles**: Authentication data managed by Firebase Auth
+**Cloudflare R2**: S3-compatible object storage for video files. Benefits include no egress fees and global edge distribution. The AWS SDK S3 Client (`@aws-sdk/client-s3`) interacts with R2. Pre-signed URLs enable direct browser-to-storage uploads without proxying through backend.
 
-**Data Isolation**: Videos filtered by uploaderId when displaying "My Channel". Public feeds show videos based on visibility settings. Security rules prevent unauthorized reads/writes.
+**Firebase Firestore**: NoSQL document database stores:
+- Video metadata (uploaderId, type, timestamp, title, description, URL)
+- User profiles and channel data
+- Creator wallets with balance tracking
+- Transaction history (tips, payouts)
+- Comments and engagement metrics
 
-**Cloudflare R2**: S3-compatible object storage for video files. Videos uploaded via pre-signed URLs with automatic bucket management. R2 chosen for cost-effectiveness (no egress fees) and S3 compatibility (allows using AWS SDK).
+**Data Consistency**: Atomic Firestore transactions ensure wallet balance updates are consistent during tip confirmations. The `runTransaction` method prevents race conditions when multiple tips occur simultaneously.
 
-**Local Storage**: Client-side persistence for non-critical data like UI preferences (theme, sidebar state), watch history, and temporary state. Serves as fallback when offline.
-
-### Payment Integration
-
-**Stripe Integration**: 
-- PaymentIntent API for secure card payments
-- Server-side payment confirmation prevents fraud
-- Webhook-ready architecture (confirmation endpoint)
-- Currency handled in cents to avoid floating-point errors
-- Minimum payout threshold enforced ($10)
-
-**Wallet System**:
-- Each creator has a wallet document in Firestore
-- Balance atomically updated on successful tips
-- Transaction records created for audit trail
-- Payout requests decrement balance and create pending records
-
-**Payment Flow**:
-1. User initiates tip via frontend
-2. `/api/process-tip` creates Stripe PaymentIntent
-3. Frontend confirms payment with Stripe.js
-4. `/api/confirm-tip` verifies payment and updates wallets
-5. Transaction record created in Firestore
+**Schema Design**: Videos collection uses uploaderId as filterable field for user isolation. Wallets collection uses userId as document ID for fast lookups. Transactions collection includes indexed timestamp for chronological ordering.
 
 ## External Dependencies
 
-### Cloud Services
-
-**Firebase (Google Cloud)**:
-- Authentication service for Google Sign-In
-- Firestore NoSQL database for application data
-- Free tier supports initial scaling
-- Project ID: `tiktikvideos-4e8e7`
-- Requires service account credentials (project ID, client email, private key)
+**Firebase Services**:
+- Firebase Authentication - Google OAuth provider for user sign-in
+- Firebase Firestore - Real-time NoSQL database for metadata and user data
+- Firebase Admin SDK (v12.7.0) - Server-side authentication verification and database access
 
 **Cloudflare R2**:
 - S3-compatible object storage for video files
-- Accessed via AWS SDK v3 (`@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`)
-- Requires endpoint URL, access key ID, and secret access key
-- Region set to "auto" for automatic routing
-
-**Vercel**:
-- Hosting platform for static frontend and serverless functions
-- Automatic deployments from Git
-- Environment variable management
-- Free tier available for small projects
-
-### Payment Processing
+- Accessed via AWS SDK S3 Client (v3.917.0)
+- Requires R2 endpoint URL, access key ID, secret access key, and bucket name
 
 **Stripe**:
-- Payment processing for creator tips
-- Node.js SDK version 14.25.0
-- Requires secret key for server-side operations
-- PaymentIntent API for card payments
-- Future support for payouts via Stripe Connect
+- Payment processing for creator tips (v14.25.0)
+- PaymentIntent API for secure payment flow
+- Supports test and live environments via separate API keys
 
-### NPM Dependencies
+**AWS SDK**:
+- `@aws-sdk/client-s3` (v3.917.0) - S3 operations for R2 interaction
+- `@aws-sdk/s3-request-presigner` (v3.917.0) - Generates pre-signed URLs with expiration
 
-**Production**:
-- `firebase-admin@^12.7.0`: Server-side Firebase SDK for auth and Firestore
-- `@aws-sdk/client-s3@^3.917.0`: S3 client for R2 storage operations
-- `@aws-sdk/s3-request-presigner@^3.917.0`: Generates pre-signed URLs
-- `stripe@^14.25.0`: Payment processing API
+**Vercel Platform**:
+- Serverless function hosting with automatic deployment
+- Edge network for global distribution
+- Environment variable management for secrets
 
-**Development**:
-- `vercel@^33.0.0`: CLI for local development and deployment
+**Third-Party CDNs**:
+- Font Awesome 6.0.0 - Icon library for UI elements
+- Firebase SDK 10.7.1 (compat) - Loaded from Google CDN
 
-### Frontend Libraries
-
-**CDN-hosted**:
-- Firebase JavaScript SDK 10.7.1 (app-compat, auth-compat, firestore-compat)
-- Font Awesome 6.0.0 for icons
-
-### Environment Variables Required
-
-```
-FIREBASE_PROJECT_ID
-FIREBASE_CLIENT_EMAIL
-FIREBASE_PRIVATE_KEY
-R2_ENDPOINT
-R2_ACCESS_KEY_ID
-R2_SECRET_ACCESS_KEY
-R2_BUCKET_NAME
-STRIPE_SECRET_KEY
-ALLOWED_ORIGIN
-```
-
-### Browser APIs Used
-
-- MediaRecorder API (live streaming)
-- getUserMedia API (camera/mic access)
-- Service Worker API (PWA offline support)
-- LocalStorage API (client-side persistence)
-- Fetch API (HTTP requests)
+**Environment Variables Required**:
+- `FIREBASE_PROJECT_ID` - Firebase project identifier
+- `FIREBASE_CLIENT_EMAIL` - Service account email
+- `FIREBASE_PRIVATE_KEY` - Service account private key (newlines escaped)
+- `FIREBASE_API_KEY` - Client API key (public)
+- `FIREBASE_AUTH_DOMAIN` - Authentication domain (public)
+- `R2_ENDPOINT` - Cloudflare R2 endpoint URL
+- `R2_ACCESS_KEY_ID` - R2 access credentials
+- `R2_SECRET_ACCESS_KEY` - R2 secret credentials
+- `R2_BUCKET_NAME` - Target storage bucket
+- `STRIPE_SECRET_KEY` - Stripe API key (test or live)
+- `ALLOWED_ORIGIN` - CORS allowed origin (optional, defaults to *)

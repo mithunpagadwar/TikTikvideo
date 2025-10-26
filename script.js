@@ -1,28 +1,56 @@
 // TikTik - YouTube Clone Application
 // Pure JavaScript implementation with local storage persistence
 
-// Firebase Configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyBlWjogX3gTipSJK31AwVw0D6KxDv3ry7Y",
-  authDomain: "tiktikvideos-4e8e7.firebaseapp.com",
-  projectId: "tiktikvideos-4e8e7"
-};
-
-// Initialize Firebase
+// Firebase Configuration - loaded from backend
 let firebaseApp = null;
 let firebaseAuth = null;
 let firestore = null;
 
-// Initialize Firebase when available
-if (typeof firebase !== 'undefined') {
+// Initialize Firebase by fetching config from backend
+async function initializeFirebase() {
+  if (typeof firebase === 'undefined') {
+    console.error('Firebase SDK not loaded');
+    return false;
+  }
+
   try {
-    firebaseApp = firebase.initializeApp(firebaseConfig);
+    // Fetch Firebase config from backend endpoint (no keys in frontend!)
+    const response = await fetch('/api/get-config');
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error('Failed to load Firebase config');
+    }
+
+    // Initialize Firebase with config from backend
+    firebaseApp = firebase.initializeApp(data.firebase);
     firebaseAuth = firebase.auth();
     firestore = firebase.firestore();
     console.log('Firebase initialized successfully');
+    return true;
   } catch (error) {
     console.error('Firebase initialization error:', error);
+    return false;
   }
+}
+
+// Initialize Firebase when page loads
+if (typeof firebase !== 'undefined') {
+  // Start Firebase initialization immediately
+  initializeFirebase().then(async (success) => {
+    if (success) {
+      console.log('Firebase initialized successfully');
+      // If app is already created, set up auth and load videos
+      if (window.tiktikApp) {
+        // Set up auth state listener now that Firebase is ready
+        window.tiktikApp.setupAuthStateListener();
+        // Load videos from Firestore
+        await window.tiktikApp.loadAllVideosFromFirestore();
+        window.tiktikApp.loadHomePage();
+        console.log('Firebase auth listener setup and videos loaded');
+      }
+    }
+  });
 }
 
 class TikTikApp {
@@ -54,13 +82,21 @@ class TikTikApp {
         this.init();
     }
 
-    init() {
+    async init() {
         this.setupEventListeners();
         this.applyTheme();
-        this.loadAllVideosFromFirestore();
-        this.loadHomePage();
         this.updateAdminSettings();
-        this.setupAuthStateListener();
+        
+        // Wait for Firebase to initialize before loading videos and auth
+        if (firestore) {
+            this.setupAuthStateListener();
+            await this.loadAllVideosFromFirestore();
+        } else {
+            console.log('Waiting for Firebase to initialize...');
+            // Will be loaded after Firebase init completes
+        }
+        
+        this.loadHomePage();
     }
 
     // Setup Firebase authentication state listener
@@ -117,60 +153,47 @@ class TikTikApp {
         if (!firestore || !this.currentUserId) return;
 
         try {
-            // Load regular videos
-            const videosSnapshot = await firestore.collection('videos')
+            // Load all videos from current user (single where clause, no composite index needed)
+            const allVideosSnapshot = await firestore.collection('videos')
                 .where('uploaderId', '==', this.currentUserId)
-                .where('isShort', '==', false)
-                .where('isLive', '==', false)
-                .orderBy('timestamp', 'desc')
                 .get();
 
+            // Filter client-side to avoid composite index requirement
             this.myVideos = [];
-            videosSnapshot.forEach(doc => {
-                const data = doc.data();
-                this.myVideos.push({
-                    id: doc.id,
-                    ...data,
-                    views: this.formatNumber(data.views || 0) + ' views',
-                    uploadTime: this.formatUploadTime(data.timestamp),
-                });
-            });
-
-            // Load shorts
-            const shortsSnapshot = await firestore.collection('videos')
-                .where('uploaderId', '==', this.currentUserId)
-                .where('isShort', '==', true)
-                .orderBy('timestamp', 'desc')
-                .get();
-
             this.myShorts = [];
-            shortsSnapshot.forEach(doc => {
+            this.liveStreams = [];
+
+            allVideosSnapshot.forEach(doc => {
                 const data = doc.data();
-                this.myShorts.push({
+                const videoData = {
                     id: doc.id,
                     ...data,
                     views: this.formatNumber(data.views || 0) + ' views',
                     uploadTime: this.formatUploadTime(data.timestamp),
-                });
+                };
+
+                // Filter by type
+                if (data.isShort === true) {
+                    this.myShorts.push(videoData);
+                } else if (data.isLive === true) {
+                    videoData.views = this.formatNumber(data.viewers || 0) + ' viewers';
+                    videoData.uploadTime = data.endTime ? this.formatUploadTime(data.endTime) : 'Live now';
+                    this.liveStreams.push(videoData);
+                } else {
+                    this.myVideos.push(videoData);
+                }
             });
 
-            // Load live streams
-            const liveSnapshot = await firestore.collection('videos')
-                .where('uploaderId', '==', this.currentUserId)
-                .where('isLive', '==', true)
-                .orderBy('timestamp', 'desc')
-                .get();
+            // Sort by timestamp (client-side)
+            const sortByTimestamp = (a, b) => {
+                const aTime = a.timestamp?.toMillis?.() || 0;
+                const bTime = b.timestamp?.toMillis?.() || 0;
+                return bTime - aTime;
+            };
 
-            this.liveStreams = [];
-            liveSnapshot.forEach(doc => {
-                const data = doc.data();
-                this.liveStreams.push({
-                    id: doc.id,
-                    ...data,
-                    views: this.formatNumber(data.viewers || 0) + ' viewers',
-                    uploadTime: data.endTime ? this.formatUploadTime(data.endTime) : 'Live now',
-                });
-            });
+            this.myVideos.sort(sortByTimestamp);
+            this.myShorts.sort(sortByTimestamp);
+            this.liveStreams.sort(sortByTimestamp);
 
             // Update channel page if currently viewing
             if (this.currentPage === 'library') {
@@ -2733,7 +2756,7 @@ class TikTikApp {
         btn.innerHTML = this.isMicOn ? '<i class="fas fa-microphone"></i> Microphone' : '<i class="fas fa-microphone-slash"></i> Microphone';
     }
 
-    startLiveStream() {
+    async startLiveStream() {
         const title = document.getElementById('liveTitle').value.trim();
         const description = document.getElementById('liveDescription').value.trim();
         const category = document.getElementById('liveCategory').value;
@@ -2744,81 +2767,126 @@ class TikTikApp {
             return;
         }
 
-        // Capture frame from camera for thumbnail
-        const preview = document.getElementById('cameraPreview');
-        let thumbnailDataUrl = 'https://pixabay.com/get/g2d6e4de48b7bd3a87afab6e869007196adcc1cb3dfd663e6e585bcffd24c3260ab24ba71895df36ec3dc5902cba221c21d6918c76ffa1876e8ac616c437334eb_1280.jpg';
-        
-        if (preview && preview.srcObject) {
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = preview.videoWidth || 320;
-                canvas.height = preview.videoHeight || 180;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
-                thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            } catch (e) {
-                console.log('Could not capture thumbnail from camera');
-            }
+        if (!this.currentUserId) {
+            this.showToast('Please login first', 'error');
+            return;
         }
 
-        // Create new live stream object with recording capability
-        const newLiveStream = {
-            id: Date.now().toString(),
-            title: title,
-            channel: this.channelData.name,
-            avatar: this.channelData.avatar || 'https://pixabay.com/get/g1882a617f55023cde87198feea9e830686b0a69ae7f315295cebe2b111a575a3d2dd94672359c9d34b332edd722a8e7d502b680acae2e35040353fd2a2ee0f9a_1280.jpg',
-            thumbnail: thumbnailDataUrl,
-            duration: 'LIVE',
-            views: '0 viewers',
-            uploadTime: 'Live now',
-            likes: 0,
-            description: description,
-            videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-            category: category,
-            privacy: privacy,
-            startTime: new Date().toISOString(),
-            viewers: 0,
-            isLive: true
-        };
-
-        // Add to live streams and save
-        this.liveStreams.push(newLiveStream);
-        this.saveLiveStreams();
-
-        // Also add to main videos array for visibility
-        this.videos.unshift(newLiveStream);
-
-        // Update channel stats
-        this.channelData.videoCount = this.myVideos.length + this.myShorts.length + this.liveStreams.length;
-        this.saveChannelData();
-
-        this.closeLiveModal();
-        this.showToast('Live stream started and saved successfully!', 'success');
-
-        // Refresh pages
-        if (this.currentPage === 'library') {
-            this.loadLibraryPage();
-        } else {
-            this.loadHomePage();
+        if (!this.cameraStream) {
+            this.showToast('Camera not initialized', 'error');
+            return;
         }
 
-        // Simulate live stream ending and converting to video after some time
-        setTimeout(() => {
-            const streamIndex = this.liveStreams.findIndex(s => s.id === newLiveStream.id);
-            if (streamIndex !== -1) {
-                this.liveStreams[streamIndex].isLive = false;
-                this.liveStreams[streamIndex].duration = '25:45';
-                this.liveStreams[streamIndex].views = '325 views';
-                this.liveStreams[streamIndex].uploadTime = 'Streamed 30 minutes ago';
-                this.saveLiveStreams();
-                this.showToast('Live stream ended and saved to your channel', 'success');
-                
-                // Refresh if on library page
-                if (this.currentPage === 'library') {
-                    this.loadLibraryPage();
+        try {
+            this.showLoading();
+
+            // Capture frame from camera for thumbnail
+            const preview = document.getElementById('cameraPreview');
+            let thumbnailDataUrl = '';
+            
+            if (preview && preview.srcObject) {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = preview.videoWidth || 320;
+                    canvas.height = preview.videoHeight || 180;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(preview, 0, 0, canvas.width, canvas.height);
+                    thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                } catch (e) {
+                    console.log('Could not capture thumbnail from camera');
                 }
             }
-        }, 1800000); // End stream after 30 minutes
+
+            // Initialize MediaRecorder for actual recording
+            this.recordedChunks = [];
+            const options = { mimeType: 'video/webm;codecs=vp9' };
+            
+            // Fallback to vp8 if vp9 not supported
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options.mimeType = 'video/webm;codecs=vp8';
+            }
+
+            this.mediaRecorder = new MediaRecorder(this.cameraStream, options);
+            
+            this.mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    this.recordedChunks.push(event.data);
+                }
+            };
+
+            this.mediaRecorder.onstop = async () => {
+                try {
+                    // Create video blob from recorded chunks
+                    const blob = new Blob(this.recordedChunks, { type: 'video/webm' });
+                    const videoFile = new File([blob], `live-${Date.now()}.webm`, { type: 'video/webm' });
+
+                    this.showToast('Uploading recorded stream...', 'info');
+
+                    // Upload to R2
+                    const videoUrl = await uploadVideoToR2(videoFile);
+
+                    // Save to Firestore as completed live stream
+                    if (firestore) {
+                        await firestore.collection('videos').add({
+                            uploaderId: this.currentUserId,
+                            title: title,
+                            description: description,
+                            category: category,
+                            videoUrl: videoUrl,
+                            channel: this.channelData.name,
+                            avatar: this.channelData.avatar || '',
+                            thumbnail: thumbnailDataUrl || videoUrl,
+                            isShort: false,
+                            isLive: true,
+                            wasLive: true,
+                            endTime: firebase.firestore.FieldValue.serverTimestamp(),
+                            views: 0,
+                            likes: 0,
+                            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        });
+                    }
+
+                    this.showToast('Live stream saved successfully!', 'success');
+                    
+                    // Reload user's videos
+                    await this.loadUserVideos();
+                    await this.loadAllVideosFromFirestore();
+                    
+                    if (this.currentPage === 'library') {
+                        this.loadLibraryPage();
+                    }
+                } catch (error) {
+                    console.error('Error saving live stream:', error);
+                    this.showToast('Failed to save live stream: ' + error.message, 'error');
+                } finally {
+                    this.hideLoading();
+                    this.recordedChunks = [];
+                }
+            };
+
+            // Start recording (collect data every 1 second)
+            this.mediaRecorder.start(1000);
+            this.isRecording = true;
+
+            this.hideLoading();
+            this.closeLiveModal();
+            this.showToast('Live stream started! Recording in progress...', 'success');
+
+            // Show a notification that stream is live
+            const streamDuration = 5 * 60 * 1000; // 5 minutes for demo
+            setTimeout(() => {
+                if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+                    this.mediaRecorder.stop();
+                    this.isRecording = false;
+                    this.showToast('Live stream ended. Processing and uploading...', 'info');
+                }
+            }, streamDuration);
+
+        } catch (error) {
+            this.hideLoading();
+            console.error('Error starting live stream:', error);
+            this.showToast('Failed to start live stream: ' + error.message, 'error');
+        }
     }
 
     clearHistory() {
@@ -3447,8 +3515,16 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     window.tiktikApp = new TikTikApp();
+    
+    // If Firebase is already initialized, set up auth and load videos
+    if (firestore && firebaseAuth) {
+        window.tiktikApp.setupAuthStateListener();
+        await window.tiktikApp.loadAllVideosFromFirestore();
+        window.tiktikApp.loadHomePage();
+        console.log('Firebase was already ready, auth and videos loaded');
+    }
 
     // Subscribe button functionality
     const subscribeBtn = document.getElementById('subscribeBtn');
