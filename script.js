@@ -1,10 +1,15 @@
 // TikTik - YouTube Clone Application
 // Pure JavaScript implementation with local storage persistence
 
-// Firebase Configuration - loaded from backend
-let firebaseApp = null;
-let firebaseAuth = null;
-let firestore = null;
+const firebaseConfig = {
+  apiKey: "AIzaSyAY1kqPrI-Sw5LYPfIUoKE45nJ3papGZU8",
+  authDomain: "tiktik-video-2de07.firebaseapp.com",
+  projectId: "tiktik-video-2de07",
+  storageBucket: "tiktik-video-2de07.firebasestorage.app",
+  messagingSenderId: "840826006253",
+  appId: "1:840826006253:web:b84a511b18f0dd93f7fae4",
+  measurementId: "G-HPVRJBXQN2"
+};
 
 // Initialize Firebase by fetching config from backend
 async function initializeFirebase() {
