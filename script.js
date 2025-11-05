@@ -3527,6 +3527,17 @@ document.addEventListener('click', function(event) {
 });
 
 function logout() {
+  // Sign out from Firebase if available
+  if (firebaseAuth) {
+    firebaseAuth.signOut()
+      .then(() => {
+        console.log('Firebase sign-out successful');
+      })
+      .catch((error) => {
+        console.error('Firebase sign-out error:', error);
+      });
+  }
+
   // Remove user from localStorage
   localStorage.removeItem('tiktik_user');
 
